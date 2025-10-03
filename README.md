@@ -3,17 +3,19 @@
   <a href="https://burgdev.github.io/immichporter"><img src="https://raw.githubusercontent.com/burgdev/immichporter/refs/heads/main/assets/logo/logo.svg" alt="Immichporter" width="128" /></a>
 </p>
 <p align="center">
-    <em>Chainable Python client for Imagor and Thumbor image processing servers</em>
+    <em>Google photos to immich importer helper</em>
 </p>
+<!--
 <p align="center">
     <b><a href="https://burgdev.github.io/immichporter">Documentation</a></b>
     | <b><a href="https://pypi.org/project/immichporter">PyPI</a></b>
+    -->
 </p>
 
 ---
 <!-- # --8<-- [start:readme_index] <!-- -->
 
-**Immichporter** import photos from google photos to Immich.
+**Immichporter** exports google photos information into a database which can be used to import the information back into immich.
 
 ## Installation
 
