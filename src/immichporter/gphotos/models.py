@@ -13,6 +13,7 @@ class AlbumInfo:
     items: int
     shared: bool
     url: str
+    album_id: int | None = None
 
 
 @dataclass

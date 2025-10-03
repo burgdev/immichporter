@@ -14,7 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 # Configuration
-DATABASE_PATH = "photos.db"
+DATABASE_PATH = "immichporter.db"
 BRAVE_EXECUTABLE = "/usr/bin/brave-browser"
 
 # SQLAlchemy setup

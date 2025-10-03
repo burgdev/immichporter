@@ -23,6 +23,7 @@ dependencies = [
   "click",
   "sqlalchemy",
   "loguru",
+  "platformdirs>=4.4.0",
 ]
 
 [project.scripts]

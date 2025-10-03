@@ -26,17 +26,17 @@ from immichporter.database import (
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from immichporter.gphotos.models import ProcessingResult
 from immichporter.gphotos.models import AlbumInfo, PictureInfo
+from immichporter.gphotos.settings import playwright_session_dir
 
 console = Console()
 
 # Configuration constants
-USER_DATA_DIR = "./brave_playwright_profile2"
 DEFAULT_TIMEOUT = 10000
 INFO_PANEL_TIMEOUT = 2000
 ALBUM_NAVIGATION_DELAY = 0
 IMAGE_NAVIGATION_DELAY = 0.05
-DUPLICATE_THRESHOLD = 10
-DUPLICATE_LOG_THRESHOLD = 5
+DUPLICATE_ERROR_THRESHOLD = 7
+DUPLICATE_NEXT_IMAGE_THRESHOLD = 4
 MAX_ALBUMS = 0
 
 STEALTH_ARGS = [
@@ -62,12 +62,12 @@ class GooglePhotosScraper:
 
     def __init__(
         self,
-        max_albums: int = 5,
+        max_albums: int = 0,
         start_album: int = 1,
         album_fresh: bool = False,
         albums_only: bool = False,
         clear_storage: bool = False,
-        user_data_dir: str = USER_DATA_DIR,
+        user_data_dir: str = playwright_session_dir,
     ):
         self.max_albums = max_albums
         self.start_album = start_album
@@ -79,13 +79,14 @@ class GooglePhotosScraper:
         self.playwright = None
         self.context = None
         self.page = None
+        self._default_user = None
 
     async def setup_browser(self) -> None:
         """Initialize and setup the browser context."""
-        console.print("[blue]Starting Playwright...[/blue]")
+        logger.info("Starting Playwright ...")
         self.playwright = await async_playwright().start()
 
-        console.print("[blue]Launching browser...[/blue]")
+        console.print("Launching browser ...")
         # Add arguments to force new session and prevent conflicts
         storage_args = [
             "--clear-browsing-data",
@@ -93,26 +94,6 @@ class GooglePhotosScraper:
             "--disable-session-crashed-bubble",
             "--disable-infobars",
             "--disable-restore-session-state",
-            #'--disable-session-crashed-bubble',
-            #'--disable-infobars',
-            #'--disable-restore-session-state',
-            #'--no-first-run',
-            #'--no-default-browser-check',
-            #'--disable-features=TranslateUI',
-            #'--disable-background-mode',
-            #'--disable-background-timer-throttling',
-            #'--disable-renderer-backgrounding',
-            #'--disable-backgrounding-occluded-windows',
-            #'--disable-client-side-phishing-detection',
-            #'--disable-crash-reporter',
-            #'--disable-extensions',
-            #'--disable-plugins',
-            #'--disable-popup-blocking',
-            #'--disable-prompt-on-repost',
-            #'--disable-sync',
-            #'--disable-web-security',
-            #'--disable-features=VizDisplayCompositor',
-            #'--disable-blink-features=AutomationControlled'
         ]
         all_args = STEALTH_ARGS + storage_args
 
@@ -123,11 +104,11 @@ class GooglePhotosScraper:
             executable_path=None,  # Use Playwright's Chromium
             args=all_args,
             ignore_default_args=["--enable-automation"],
-            viewport={"width": 1280, "height": 720},
+            viewport={"width": 1000, "height": 700},
             slow_mo=40,
         )
 
-        console.print("[blue]Creating page...[/blue]")
+        logger.debug("Creating page ...")
         # self.page = await self.context.new_page()
         self.page = (
             self.context.pages[0]
@@ -136,7 +117,7 @@ class GooglePhotosScraper:
         )
         # await self.page.set_viewport_size({"width": 1280, "height": 720})
 
-        console.print("[blue]Adding stealth script...[/blue]")
+        logger.debug("Adding stealth script ...")
         # Set up stealth mode
         await self.page.add_init_script(STEALTH_INIT_SCRIPT)
 
@@ -145,7 +126,7 @@ class GooglePhotosScraper:
         if path:
             url += f"/{path}"
         try:
-            console.print(f"[blue]Navigating to '{url}'[/blue]")
+            console.print(f"Navigating to [blue]'{url}'[/blue]")
             await self.page.goto(url)
             await self.page.wait_for_load_state("domcontentloaded")
         except Exception as e:
@@ -166,7 +147,7 @@ class GooglePhotosScraper:
 
         # Wait for navigation to complete and get current URL
         current_url = await self.page.evaluate("window.location.href")
-        console.print(f"[blue]Current URL: {current_url}[/blue]")
+        logger.debug(f"Current URL: {current_url}")
 
         # Check if we're already logged in (redirected to main photos page)
         if "photos.google.com/" in current_url and "login" not in current_url:
@@ -175,22 +156,15 @@ class GooglePhotosScraper:
 
         # If we get here, we're on the login page
         console.print(
-            "[yellow]Please log in to Google Photos in the browser...[/yellow]"
+            "[yellow]Please log in to Google Photos in the browser ...[/yellow]"
         )
+        while "photos.google.com/" not in current_url and "login" in current_url:
+            await self.page.wait_for_load_state("domcontentloaded")
+            current_url = await self.page.evaluate("window.location.href")
+            await asyncio.sleep(0.2)
         console.print(
             "[yellow]Press Enter in the console when you are logged in.[/yellow]"
         )
-        input()
-
-        # Verify login was successful
-        await self.page.wait_for_load_state("domcontentloaded")
-        current_url = await self.page.evaluate("window.location.href")
-        if "login" in current_url:
-            console.print(
-                "[red]Login may not have been successful. Still on login page.[/red]"
-            )
-            return False
-
         console.print("[green]Login successful![/green]")
         return True
 
@@ -208,11 +182,11 @@ class GooglePhotosScraper:
                 raise ValueError("Could not find album information elements")
 
             album_title, description = (await children[1].inner_text()).split("\n", 1)
-            console.print(f"[blue]Album Title:[/blue] {album_title}")
+            logger.info(f"Album Title: {album_title}")
             shared = "shared" in description.lower()
-            console.print(f"[blue]Shared:[/blue] {shared}")
+            logger.info(f"Shared: {shared}")
             items = int(description.split(" ")[0])
-            console.print(f"[blue]Items:[/blue] {items}")
+            logger.info(f"Items: {items}")
 
             return AlbumInfo(title=album_title, items=items, shared=shared, url=url)
 
@@ -220,12 +194,9 @@ class GooglePhotosScraper:
             console.print(f"[red]Error getting album info: {e}[/red]")
             return None
 
-    async def get_picture_info(self, album_title: str) -> Optional[PictureInfo]:
+    async def get_picture_info(self, album: AlbumInfo) -> Optional[PictureInfo]:
         """Extract information from the current picture."""
         try:
-            # Wait for info panel to be visible
-            # await self.page.wait_for_selector('div[aria-label*="Filename"]', timeout=INFO_PANEL_TIMEOUT)
-
             # Extract filename
             filename = None
             cnt = 0
@@ -264,12 +235,17 @@ class GooglePhotosScraper:
             date_obj, date_str = self._parse_date(f"{date_text} {time_text}")
 
             # Extract shared by information
-            shared_by = await self._get_text_safely(
-                'div:text("Shared by")', timeout=INFO_PANEL_TIMEOUT
-            )
-            shared_by = (
-                shared_by.replace("Shared by", "").strip() if shared_by else "N/A"
-            )
+            if album.shared:
+                shared_by = await self._get_text_safely(
+                    'div:text("Shared by")', timeout=INFO_PANEL_TIMEOUT
+                )
+                shared_by = (
+                    shared_by.replace("Shared by", "").strip() if shared_by else "N/A"
+                )
+            else:
+                default_user = await self.get_default_user()
+                logger.debug(f"Use default user {default_user}")
+                shared_by = default_user
 
             return PictureInfo(
                 filename=filename,
@@ -315,48 +291,59 @@ class GooglePhotosScraper:
             logger.warning(f"Error parsing date '{date_str}': {e}")
             return None, date_str
 
+    async def get_default_user(self) -> str:
+        """Extract information from the current picture."""
+        if self._default_user is not None:
+            return self._default_user
+        try:
+            google_account_element = await self.page.wait_for_selector(
+                'a[aria-label*="Google Account"]', timeout=5000
+            )
+            google_account = await google_account_element.get_attribute("aria-label")
+            name_email = google_account.split(":", 1)[1].strip()
+            name = name_email.split("\n")[0].strip()
+            # email = name_email.split("\n")[1].strp("() ")
+            self._default_user = name
+            console.print(f"Default user: [green]'{name}'[/green]")
+            return name
+
+        except Exception as e:
+            logger.error(f"Getting picture info: {e}")
+            return None
+
     async def process_album_from_db(
         self,
-        album_id: int,
-        album_gphoto_url: str,
-        album_gphoto_title: str,
-        album_items: int,
+        album: AlbumInfo,
     ) -> AlbumInfo:
         """Process images from an album using its gphoto_url URL."""
-        console.print(f"[green]Processing album: {album_gphoto_title}[/green]")
-
-        # Navigate to album - convert relative URL to absolute URL
-        if album_gphoto_url.startswith("./"):
-            album_gphoto_url = f"https://photos.google.com{album_gphoto_url[1:]}"
-        elif album_gphoto_url.startswith("./album/"):
-            album_gphoto_url = f"https://photos.google.com{album_gphoto_url[1:]}"
-
-        console.print(f"[blue]Navigating to: {album_gphoto_url}[/blue]")
-        await self.page.goto(album_gphoto_url)
-        await self.page.wait_for_load_state("domcontentloaded")
+        console.print(
+            f"Processing album {album.album_id} [green]'{album.title}'[/green]", end=""
+        )
 
         # Get existing photo count
         with get_db_session() as session:
-            existing_count = get_album_photos_count(session, album_id)
-
-        console.print(
-            f"[blue]Album has {album_items} items, {existing_count} already processed[/blue]"
-        )
+            existing_count = get_album_photos_count(session, album.album_id)
 
         # Skip if already fully processed
-        if existing_count >= album_items and self.skip_existing:
-            console.print(
-                f"[yellow]Album {album_gphoto_title} already fully processed. Skipping.[/yellow]"
-            )
+        if existing_count >= album.items and self.skip_existing:
+            console.print("[red] - already fully processed. Skipping.[/red]")
             return
+        else:
+            console.print(
+                f" - [blue]{existing_count}/{album.items}[/blue] items already processed"
+            )
 
+        # Navigate to album - convert relative URL to absolute URL
+        logger.info(f"Navigating to: {album.url}")
+        await self.page.goto(album.url)
+        await self.page.wait_for_load_state("domcontentloaded")
         # Process photos
         processed_photos = 0
         duplicate_count = 0
         # processed_count = existing_count
 
         # Find and navigate to the first image
-        console.print("[blue]Looking for first image in album...[/blue]")
+        logger.info("Looking for first image in album ...")
         first_image_url = None
         try:
             # Look for the first a tag with aria-label containing "Photo -"
@@ -380,21 +367,19 @@ class GooglePhotosScraper:
                 await self.page.goto(first_image_url)
                 await self.page.wait_for_load_state("domcontentloaded")
             else:
-                console.print(
-                    "[yellow]Could not get href from first image element[/yellow]"
-                )
+                console.print("[red]Could not get href from first image element[/red]")
 
         except Exception as e:
-            console.print(f"[yellow]Could not find first image element: {e}[/yellow]")
+            console.print(f"[red]Could not find first image element: {e}[/red]")
 
         if not first_image_url:
             console.print(
-                f"[red]Could not find first photo for album {album_gphoto_title}, please fix it manually and press Enter to continue."
+                f"[red]Could not find first photo for album {album.title}, please fix it manually and press Enter to continue.[/red]"
             )
-            input()
+            return
 
         # Get picture info for the first image after navigation
-        picture_info = await self.get_picture_info(album_gphoto_title)
+        picture_info = await self.get_picture_info(album)
         pictures = []
         last_source_id = None
         duplicate_count = 0
@@ -409,13 +394,13 @@ class GooglePhotosScraper:
             console=console,
         ) as progress:
             task = progress.add_task(
-                f"Processing {album_gphoto_title}...",
-                total=album_items,
+                f"Processing {album.title}...",
+                total=album.items,
                 completed=processed_photos,
             )
 
             photo_position = 1
-            while processed_photos < album_items:
+            while processed_photos < album.items:
                 # go to the correct photo position (needed if some where already processed)
                 if photo_position < processed_photos:
                     await self.keyboard_press(
@@ -425,7 +410,7 @@ class GooglePhotosScraper:
                     continue
 
                 try:
-                    picture_info = await self.get_picture_info(album_gphoto_title)
+                    picture_info = await self.get_picture_info(album)
 
                     if not picture_info:
                         logger.error("Could not extract info for current image")
@@ -437,26 +422,23 @@ class GooglePhotosScraper:
                         and picture_info.source_id != ""
                     ):
                         duplicate_count += 1
-                        if duplicate_count >= DUPLICATE_LOG_THRESHOLD:
-                            await asyncio.sleep(1)
-                            logger.warning(
-                                f"Duplicate url detected: {picture_info.url} ({duplicate_count})"
-                            )
-                            console.print("[red]Press Enter to continue...[/red]")
-                            input()
-
-                        if duplicate_count >= DUPLICATE_THRESHOLD:
-                            logger.error(
-                                "Reached end of album before expected (duplicate threshold met)"
-                            )
-                            # we add the same name to the album
-
-                        else:
-                            # we missed a arrow right
+                        progress.update(
+                            task,
+                            advance=0,
+                            description=f"[green]{processed_photos}/{album.items} - {picture_info.filename}[/green] [red](taking a bit longer {'.'*duplicate_count})[/red]",
+                        )
+                        if duplicate_count >= DUPLICATE_NEXT_IMAGE_THRESHOLD:
                             await self.keyboard_press(
                                 "ArrowRight", delay=IMAGE_NAVIGATION_DELAY
                             )
-                            await asyncio.sleep(0.15)
+                            await asyncio.sleep(0.2)
+
+                        if duplicate_count >= DUPLICATE_ERROR_THRESHOLD:
+                            logger.error("Reached end of album before expected")
+                            break  # next album
+
+                        else:
+                            await asyncio.sleep(0.15 * (duplicate_count + 1))
                             continue
 
                     # New picture found
@@ -466,12 +448,16 @@ class GooglePhotosScraper:
 
                     # Save to database
                     try:
-                        if picture_info.user and picture_info.user != "N/A":
+                        if (
+                            picture_info.user
+                            and picture_info.user != "N/A"
+                            and picture_info.user not in processed_users
+                        ):
                             with get_db_session() as session:
                                 user_id = insert_or_update_user(
                                     session, picture_info.user
                                 )
-                                link_user_to_album(session, album_id, user_id)
+                                link_user_to_album(session, album.album_id, user_id)
                                 processed_users.add(picture_info.user)
 
                         # Insert photo
@@ -480,7 +466,7 @@ class GooglePhotosScraper:
                                 session,
                                 picture_info,
                                 user_id=user_id,
-                                album_id=album_id,
+                                album_id=album.album_id,
                             )
 
                         # Photo was successfully inserted (not a duplicate)
@@ -490,134 +476,61 @@ class GooglePhotosScraper:
                         if photo_id is not None:
                             with get_db_session() as session:
                                 update_album_processed_items(
-                                    session, album_id, processed_photos
+                                    session, album.album_id, processed_photos
                                 )
-
-                            # Link user to album for shared photos
-
                             # Display progress for successfully processed photo
                             progress.update(
                                 task,
                                 advance=1,
-                                description=f"[green]{processed_photos}/{album_items} - {picture_info.filename}[/green]",
+                                description=f"[green]{processed_photos}/{album.items} - {picture_info.filename}[/green]",
                             )
                         else:
+                            # Display progress for successfully processed photo
                             # Photo is a duplicate, skip it but continue processing
-                            console.print(
-                                f"[yellow]Skipping exiting photo: {picture_info.filename}[/yellow]"
+                            progress.update(
+                                task,
+                                advance=1,
+                                description=f"[green]{processed_photos}/{album.items}[/green] - [blue]{picture_info.filename} (already processed)[/blue]",
                             )
 
                     except Exception as e:
                         logger.error(f"Error saving picture to database: {e}")
                         insert_error(
                             f"Error saving picture {picture_info.filename}: {e}",
-                            album_id,
+                            album.album_id,
                         )
 
-                    # Navigate to next image (always advance, even for duplicates)
+                    # Navigate to next image
                     await self.keyboard_press(
                         "ArrowRight", delay=IMAGE_NAVIGATION_DELAY
                     )
 
                 except Exception as e:
                     logger.error(f"Error processing picture: {e}")
-                    insert_error(
-                        f"Error processing picture in album {album_gphoto_title}: {e}",
-                        album_id,
-                    )
-                    break
+                    # insert_error(
+                    #    f"Error processing picture in album {album_gphoto_title}: {e}",
+                    #    album.album_id,
+                    # )
+                    raise
 
-        # Return to albums view
-        await self.page.goto("https://photos.google.com/albums")
-        await self.page.wait_for_load_state("domcontentloaded")
-
-        # Create AlbumInfo object for return
-        album_info = AlbumInfo(
-            title=album_gphoto_title,
-            items=album_items,
-            shared=False,  # We'll get this from DB if needed
-            # pictures=pictures,
-            url=album_gphoto_url,
-        )
+        # Return to albums view, not needed since we go to next album anyway
+        # await self.page.goto("https://photos.google.com/albums")
+        # await self.page.wait_for_load_state("domcontentloaded")
 
         console.print(
-            f"[green]Processed {len(pictures)} pictures from {album_gphoto_title}[/green]"
+            f"Processed [blue]{len(pictures)}[/blue] pictures from [green]'{album.title}'[/green] album"
         )
         if processed_users:
             console.print(
-                f"[blue]Associated users: {', '.join(processed_users)}[/blue]"
+                f"Associated users: [blue]{', '.join(processed_users)}[/blue]"
             )
-        return album_info
-
-        #
-        ## Navigate to first photo if needed
-        # if existing_count > 0:
-        #    console.print(f"[blue]Resuming from photo {existing_count + 1}[/blue]")
-        #    # This would need navigation logic to skip to the right photo
-        #    # For now, we'll start from the beginning and handle duplicates
-        #
-        # while processed_photos < (album_items - existing_count):
-        #    try:
-        #        # Get picture info
-        #        picture_info = await self.get_picture_info(album_gphoto_title)
-        #        if not picture_info:
-        #            break
-        #
-        #        # Get or create user
-        #        with get_db_session() as session:
-        #            user_id = insert_or_update_user(session, picture_info.user)
-        #
-        #        # Insert photo (returns None if already exists)
-        #        with get_db_session() as session:
-        #            photo_id = insert_photo(session, picture_info, user_id, album_id)
-        #
-        #        if photo_id is None:
-        #            duplicate_count += 1
-        #            if duplicate_count <= DUPLICATE_LOG_THRESHOLD:
-        #                console.print(f"[yellow]Duplicate photo: {picture_info.filename}[/yellow]")
-        #            elif duplicate_count == DUPLICATE_LOG_THRESHOLD + 1:
-        #                console.print(f"[yellow]... (more duplicates suppressed) [/yellow]")
-        #        else:
-        #            processed_photos += 1
-        #            console.print(f"[green]Processed photo {processed_count + processed_photos}/{album_items}: {picture_info.filename}[/green]")
-        #
-        #            # Update processed items count
-        #            with get_db_session() as session:
-        #                update_album_processed_items(session, album_id, processed_count + processed_photos)
-        #
-        #            # Link user to album
-        #            with get_db_session() as session:
-        #                link_user_to_album(session, album_id, user_id)
-        #
-        #        # Navigate to next photo
-        #        await self.page.keyboard.press('ArrowRight')
-        #        await asyncio.sleep(IMAGE_NAVIGATION_DELAY)
-        #
-        #        # Check if we've reached the end (circular navigation)
-        #        if processed_photos > 0 and duplicate_count > DUPLICATE_THRESHOLD:
-        #            console.print(f"[yellow]Reached end of album (too many duplicates)[/yellow]")
-        #            break
-        #
-        #    except Exception as e:
-        #        error_msg = f"Error processing photo in album {album_gphoto_title}: {e}"
-        #        console.print(f"[red]{error_msg}[/red]")
-        #        with get_db_session() as session:
-        #            insert_error(session, error_msg, album_id)
-        #
-        #        # Try to continue to next photo
-        #        await self.page.keyboard.press('ArrowRight')
-        #        await asyncio.sleep(IMAGE_NAVIGATION_DELAY)
-        #        continue
-        #
-        # console.print(f"[green]Completed processing album {album_gphoto_title}[/green]")
-        # console.print(f"[green]Processed {processed_photos} new photos, encountered {duplicate_count} duplicates[/green]")
+        return album
 
     async def navigate_to_album(self, album_position: int) -> None:
         """Navigate to the next album using arrow keys."""
-        console.print(f"[blue]Navigating to album {album_position}[/blue]")
+        logger.info(f"Navigating to album {album_position}")
         for _ in range(album_position):
             await self.keyboard_press("ArrowRight", delay=ALBUM_NAVIGATION_DELAY)
-        console.print("[blue]Done[/blue]")
 
     async def keyboard_press(self, key: str, delay: int | None = 0.2):
         """Press a keyboard key with optional delay."""
@@ -633,24 +546,15 @@ class GooglePhotosScraper:
         # await self.setup_browser()
 
         console.print("[green]Collecting albums from Google Photos UI...[/green]")
-        console.print(f"[blue]Starting from album position {start_album}[/blue]")
+        console.print(f"Starting from album position [blue]{start_album}[/blue]")
         if max_albums:
-            console.print(f"[blue]Maximum albums to collect: {max_albums}[/blue]")
+            logger.info(f"Maximum albums to collect: {max_albums}")
 
         albums_collected = []
         albums_processed = 0
 
         # Navigate to Google Photos albums
         await self.open_gphotos(path="albums")
-        # if self.login:
-        #    console.print("[yellow]Press Enter when logged in and on the albums site...[/yellow]")
-        #    input()
-        # else:
-        #    await self.page.wait_for_load_state("domcontentloaded")
-        #    await asyncio.sleep(1)
-
-        # Wait for the page to be fully ready
-        # console.print("[yellow]Waiting for page to be fully ready...[/yellow]")
         await asyncio.sleep(1)
 
         # Press ArrowRight to select the first album
@@ -660,15 +564,9 @@ class GooglePhotosScraper:
         # Wait a moment for the focus to settle
         await asyncio.sleep(0.2)
 
-        console.print(
-            f"[blue]Starting to collect {max_albums} albums from index {start_album}...[/blue]"
-        )
-
         # Navigate to the first album to process
         if start_album > 1:
-            console.print(
-                f"[yellow]Navigating to album index {start_album}...[/yellow]"
-            )
+            console.print(f"Navigating to album index [blue]{start_album}[/blue] ...")
             await self.navigate_to_album(
                 start_album - 2
             )  # Convert to 0-based and adjust for starting position
@@ -679,8 +577,8 @@ class GooglePhotosScraper:
                 # Navigate to next album (only one step from current position)
                 # Only navigate if we're past the first album in our collection
                 if album_position > start_album - 1:
-                    console.print(
-                        f"[blue]Navigating to album {album_position}... (start album: {start_album})[/blue]"
+                    logger.info(
+                        f"Navigating to album {album_position}... (start album: {start_album})"
                     )
                     await self.keyboard_press(
                         "ArrowRight", delay=ALBUM_NAVIGATION_DELAY
@@ -689,12 +587,10 @@ class GooglePhotosScraper:
                 # Get album info
                 album_info = await self.get_album_info()
                 if album_info is None:
-                    console.print(
-                        "[yellow]No album info found, stopping collection[/yellow]"
-                    )
+                    logger.warning("No album info found, stopping collection")
                     break
 
-                console.print(f"[green]Collecting album: {album_info.title}[/green]")
+                logger.info(f"Collecting album: {album_info.title}")
 
                 # Check if album already exists in database
                 with get_db_session() as session:
@@ -705,20 +601,18 @@ class GooglePhotosScraper:
                     with get_db_session() as session:
                         album_id = insert_or_update_album(session, album_info)
                     console.print(
-                        f"[green]Added album {album_info.title} to database (ID: {album_id})[/green]"
+                        f"Added album [green]'{album_info.title}'[/green] to database (ID: [blue]{album_id}[/blue])"
                     )
                     albums_collected.append(album_info)
                 else:
                     console.print(
-                        f"[yellow]Album {album_info.title} already exists in database. Skipping.[/yellow]"
+                        f"Album [green]'{album_info.title}'[/green] already exists in database. [yellow]Skipping.[/yellow]"
                     )
 
                 albums_processed += 1
 
                 if prev_album and prev_album.url == album_info.url:
-                    console.print(
-                        "[yellow]All albums collected (duplicate detected)[/yellow]"
-                    )
+                    console.print("All albums collected ...")
                     break
                 prev_album = AlbumInfo(**asdict(album_info))
 
@@ -730,7 +624,7 @@ class GooglePhotosScraper:
                 break
 
         console.print(
-            f"[green]Completed collecting {len(albums_collected)} albums[/green]"
+            f"[green]Completed collecting [blue]{len(albums_collected)}[/blue] albums[/green]"
         )
         return albums_collected
 
@@ -740,12 +634,13 @@ class GooglePhotosScraper:
         """Process images from albums stored in the database."""
         # await self.setup_browser()
 
-        self.open_gphotos(path="albums")
+        await self.open_gphotos(path="albums")
+        await self.get_default_user()  # save default user
 
-        console.print("[green]Processing albums from database...[/green]")
-        console.print(f"[blue]Starting from album position {start_album}[/blue]")
+        console.print("Processing albums from database ...")
+        logger.info(f"Starting from album position {start_album}")
         if max_albums:
-            console.print(f"[blue]Maximum albums to process: {max_albums}[/blue]")
+            logger.info(f"Maximum albums to process: {max_albums}")
 
         # Get albums from database
         with get_db_session() as session:
@@ -754,12 +649,10 @@ class GooglePhotosScraper:
             )
 
         if not albums:
-            console.print("[yellow]No albums found in database.[/yellow]")
-
             # If no albums exist and we're in albums-only mode, collect them first
             if self.albums_only:
                 console.print(
-                    "[blue]No albums found, collecting from UI first...[/blue]"
+                    "No albums found in database, [yellow] collecting them now[/yellow]"
                 )
                 collected_albums = await self.collect_albums(
                     max_albums=max_albums, start_album=start_album
@@ -770,54 +663,43 @@ class GooglePhotosScraper:
                     albums_processed=collected_albums,
                     errors=[],
                 )
+            else:
+                console.print(
+                    "[red]No albums found in database, run first [yellow]'immichporter photos albums'[/yellow][/red]"
+                )
 
             return ProcessingResult(
                 total_albums=0, total_pictures=0, albums_processed=[], errors=[]
             )
 
-        console.print(f"[blue]Found {len(albums)} albums to process[/blue]")
+        console.print(f"Found [blue]{len(albums)}[/blue] albums to process")
 
         # Process each album
         albums_processed = []
         total_pictures = 0
         errors = []
 
-        for album_id, album_gphoto_url, album_gphoto_title, album_items in albums:
+        # for album_id, album_gphoto_url, album_gphoto_title, album_items in albums:
+        for album in albums:
             try:
                 if self.albums_only:
                     # In albums-only mode, we just need to ensure the album exists
                     console.print(
-                        f"[blue]Album {album_gphoto_title} already exists in database[/blue]"
+                        f"Album [green]'{album.title}'[/green] already exists in database"
                     )
-                    albums_processed.append(
-                        AlbumInfo(
-                            title=album_gphoto_title,
-                            items=album_items,
-                            shared=False,  # We don't have this info in the tuple
-                            url=album_gphoto_url,
-                        )
-                    )
+                    albums_processed.append(album)
                 else:
                     # Process the album
-                    await self.process_album_from_db(
-                        album_id, album_gphoto_url, album_gphoto_title, album_items
-                    )
-                    albums_processed.append(
-                        AlbumInfo(
-                            title=album_gphoto_title,
-                            items=album_items,
-                            shared=False,  # We don't have this info in the tuple
-                            url=album_gphoto_url,
-                        )
-                    )
-                    total_pictures += album_items
+                    await self.process_album_from_db(album)
+                    albums_processed.append(album)
+                    total_pictures += album.items
 
             except Exception as e:
-                error_msg = f"Error processing album {album_gphoto_title}: {e}"
+                error_msg = f"Error processing album {album.title}: {e}"
                 console.print(f"[red]{error_msg}[/red]")
                 errors.append(error_msg)
                 with get_db_session() as session:
-                    insert_error(session, error_msg, album_id)
+                    insert_error(session, error_msg, album.album_id)
                 continue
 
         # Note: Storage state not saved with non-persistent context
