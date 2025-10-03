@@ -1,0 +1,51 @@
+name: New Version
+
+on:
+  workflow_run:
+    workflows: ["Main"]
+    types:
+      - completed
+
+jobs:
+  check-and-tag:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-venv
+
+      - name: Extract latest version
+        id: latest-version
+        run: |
+          VERSION=$(uv run inv version); echo "Current version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_ENV
+
+      - name: Check if tag exists
+        uses: mukunku/tag-exists-action@v1.6.0
+        id: check-tag
+        with:
+          tag: "v${{ env.version }}"
+
+      - name: Create and push tag if not exists
+        if: steps.check-tag.outputs.exists == 'false'
+        run: |
+          echo "Creating new tag: v${{ env.version }}"
+          git tag "v${{ env.version }}"
+          git push origin "v${{ env.version }}"
+
+      - name: Trigger repository_dispatch if tag is created
+        if: steps.check-tag.outputs.exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github.everest-preview+json" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{"event_type": "new-tag-created", "client_payload": { "version": "${{ env.version }}" }}'

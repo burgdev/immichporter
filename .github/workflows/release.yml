@@ -1,0 +1,41 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  repository_dispatch:
+    types: [new-tag-created]
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-venv
+
+      - name: Get latest changelog
+        id: changelog
+        run: |
+          VERSION=$(uv run inv version); echo "Current version: $VERSION"
+          echo "version=${VERSION}" >> $GITHUB_ENV
+          echo "body<<EOF" >> $GITHUB_ENV
+          BODY=$(uv run inv changelog); echo "Changelog body:"; echo "$BODY"
+          echo "${BODY}" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.version }}
+          name: ${{ env.version }}
+          body: ${{ env.body }}
+          draft: false
+          prerelease: false
+          make_latest: true
