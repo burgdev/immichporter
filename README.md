@@ -13,13 +13,20 @@
 </p>
 
 ---
-<!-- # --8<-- [start:readme_index] <!-- -->
+
+
+> [!WARNING]
+> Still in a early stage. At the moment only exporting from google photos is supported.
+
 
 **Immichporter** exports google photos information into a database which can be used to import the information back into immich.
 
 > [!IMPORTANT]
 > This tool does not download any images from google photos. It only exports the information into a database.
 
+<!-- # --8<-- [start:readme_index] <!-- -->
+
+Use [google takeout](https://takeout.google.com) to export your google photos data and the [`immich-go`](https://github.com/simulot/immich-go) tool to import the data into immich. After this you can use [`immichporter`](https://github.com/burgdev/immichporter) to create all albums and add people to shared albums.
 
 ## Installation
 
@@ -40,19 +47,27 @@ pip install immichporter
 # Show help
 immichporter --help
 
-# Source-specific operations
-immichporter gphoto export-albums
-immichporter gphoto export-photos
+# login is required the first time, the session is saved
+immichporter gphotos login
 
-# Database operations
-immichporter db show-albums
-immichporter db show-users
-immichporter db show-stats
+# add all albums to the database
+immichporter gphotos albums
 
-# Immich operations
-immichporter immich create-album
-immichporter immich import-photos
+# add all photos for each album to the database
+immichporter gphotos photos
+# multiple runs miht be needed until everything is correct!
+
+# see the database with https://sqlitebrowser.org
+sqlitebrowser immichporter.db
 ```
+
+## TODO:
+
+* [x] export albums with photos and people from gphotos (first version)
+* [ ] import to immich
+* [ ] improve documentation
+* [ ] imporve gphotos export stability
+
 <!-- # --8<-- [end:readme_index] <!-- -->
 
 <!--

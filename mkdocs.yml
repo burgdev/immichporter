@@ -187,9 +187,13 @@ markdown_extensions:
       custom_checkbox: true
   - pymdownx.tilde
   - mkdocs-click
+  #- pymdownx.blocks.admonition
+  #- pymdownx.blocks.details
+  #- pymdownx.blocks.tab
 
 watch:
   - src
   - README.md
+  - docs
 extra_css:
   - css/custom.css
