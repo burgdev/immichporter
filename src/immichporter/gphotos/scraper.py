@@ -24,8 +24,7 @@ from immichporter.database import (
     insert_or_update_user,
 )
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-from immichporter.gphotos.models import ProcessingResult
-from immichporter.gphotos.models import AlbumInfo, PictureInfo
+from immichporter.schemas import ProcessingResult, AlbumInfo, PictureInfo
 from immichporter.gphotos.settings import playwright_session_dir
 
 console = Console()

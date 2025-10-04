@@ -17,6 +17,10 @@
 
 **Immichporter** exports google photos information into a database which can be used to import the information back into immich.
 
+> [!IMPORTANT]
+> This tool does not download any images from google photos. It only exports the information into a database.
+
+
 ## Installation
 
 Using [uv](https://github.com/astral-sh/uv) (recommended):
@@ -49,6 +53,7 @@ immichporter db show-stats
 immichporter immich create-album
 immichporter immich import-photos
 ```
+<!-- # --8<-- [end:readme_index] <!-- -->
 
 <!--
 ## Documentation

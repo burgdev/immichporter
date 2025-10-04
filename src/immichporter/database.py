@@ -6,9 +6,9 @@ from typing import List, Dict, Any, Optional
 from rich.console import Console
 from loguru import logger
 
-from .models import Base, Album, User, Photo, Error, AlbumUser, SessionLocal
+from immichporter.models import Base, Album, User, Photo, Error, AlbumUser, SessionLocal
 
-from immichporter.gphotos.models import AlbumInfo
+from immichporter.schemas import AlbumInfo
 
 console = Console()
 
