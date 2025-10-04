@@ -61,6 +61,10 @@ immichporter gphotos photos
 # you can check with if every album is fully processed
 immichporter db show-albums --not-finished
 
+# edit/update users
+immichporter db show-users
+immichporter db edit-users # select which users should be added to immich
+
 # see the database with https://sqlitebrowser.org
 sqlitebrowser immichporter.db
 ```

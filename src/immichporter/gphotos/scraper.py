@@ -20,7 +20,7 @@ from immichporter.database import (
     album_exists,
     get_albums_from_db,
     update_album_processed_items,
-    get_album_photos_count,
+    get_album_processed_items,
     insert_or_update_user,
 )
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -31,7 +31,7 @@ console = Console()
 
 # Configuration constants
 DEFAULT_TIMEOUT = 10000
-INFO_PANEL_TIMEOUT = 2000
+INFO_PANEL_TIMEOUT = 10000
 ALBUM_NAVIGATION_DELAY = 0
 IMAGE_NAVIGATION_DELAY = 0.05
 DUPLICATE_ERROR_THRESHOLD = 7
@@ -321,15 +321,16 @@ class GooglePhotosScraper:
 
         # Get existing photo count
         with get_db_session() as session:
-            existing_count = get_album_photos_count(session, album.album_id)
+            # existing_count = get_album_photos_count(session, album.album_id)
+            processed_count = get_album_processed_items(session, album.album_id)
 
         # Skip if already fully processed
-        if existing_count >= album.items and self.skip_existing:
+        if processed_count >= album.items and self.skip_existing:
             console.print("[red] - already fully processed. Skipping.[/red]")
             return
         else:
             console.print(
-                f" - [blue]{existing_count}/{album.items}[/blue] items already processed"
+                f" - [blue]{processed_count}/{album.items}[/blue] items already processed"
             )
 
         # Navigate to album - convert relative URL to absolute URL
