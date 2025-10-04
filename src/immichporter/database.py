@@ -168,20 +168,30 @@ def is_album_fully_processed(session: Session, album_id: int) -> bool:
 
 
 def get_albums_from_db(
-    session: Session, limit: int = None, offset: int = 0
+    session: Session, limit: int = None, offset: int = 0, not_finished: bool = False
 ) -> list[AlbumInfo]:
-    """Get albums from database with pagination."""
-    query = (
-        session.query(
-            Album.id,
-            Album.source_url,
-            Album.source_title,
-            Album.items,
-            Album.shared,
-        )
-        .filter_by(source_type="gphoto")
-        .order_by(Album.id)
-    )
+    """Get albums from database with pagination.
+
+    Args:
+        session: Database session
+        limit: Maximum number of albums to return
+        offset: Number of albums to skip
+        not_finished: If True, only return albums that are not fully processed
+    """
+    query = session.query(
+        Album.id,
+        Album.source_url,
+        Album.source_title,
+        Album.items,
+        Album.processed_items,
+        Album.shared,
+        Album.created_at,
+    ).filter_by(source_type="gphoto")
+
+    if not_finished:
+        query = query.filter(Album.processed_items < Album.items)
+
+    query = query.order_by(Album.id)
 
     if limit:
         query = query.offset(offset).limit(limit)
@@ -193,6 +203,8 @@ def get_albums_from_db(
             title=album.source_title,
             items=album.items,
             shared=album.shared,
+            processed_items=getattr(album, "processed_items", 0),
+            created_at=getattr(album, "created_at", None),
             url=album.source_url,
         )
         for album in res

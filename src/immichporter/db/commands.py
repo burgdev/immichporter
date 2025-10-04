@@ -1,8 +1,11 @@
 """Database CLI commands."""
 
 import click
+import math
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
+from rich.style import Style
 from immichporter.database import (
     get_db_session,
     get_albums_from_db,
@@ -21,35 +24,58 @@ def init():
 
 
 @click.command()
-def show_albums():
-    """Show all albums in the database."""
+@click.option(
+    "-n",
+    "--not-finished",
+    is_flag=True,
+    help="Show only albums that are not fully processed",
+)
+def show_albums(not_finished):
+    """Show albums in the database."""
     with get_db_session() as session:
-        albums = get_albums_from_db(session)
+        albums = get_albums_from_db(session, not_finished=not_finished)
 
         if not albums:
-            console.print("[yellow]No albums found in database[/yellow]")
+            msg = "No albums found"
+            if not_finished:
+                msg += " that are not fully processed"
+            console.print(f"[yellow]{msg} in database[/yellow]")
             return
 
-        table = Table(title="Albums")
+        table_title = "Albums"
+        if not_finished:
+            table_title += " (Not Fully Processed)"
+
+        table = Table(title=table_title)
         table.add_column("ID", style="cyan")
-        table.add_column("Source Title", style="magenta")
-        table.add_column("Source Type", style="blue")
+        table.add_column("Title", style="magenta")
         table.add_column("Items", style="green")
         table.add_column("Processed", style="yellow")
         table.add_column("Shared", style="red")
         table.add_column("Created", style="dim")
 
         for album in albums:
+            # Calculate percentage with floor to avoid showing 100% until fully processed
+            percentage = (
+                math.floor((album.processed_items / album.items) * 100)
+                if album.items > 0
+                else 0
+            )
+            percentage_str = f"({percentage}%)"
+
+            # Create clickable title with URL if available
+            title_text = Text(album.title)
+            if hasattr(album, "url") and album.url:
+                title_text.stylize(f"link {album.url}")
+                title_text.append(" 🔗", style=Style(dim=True))
+
             table.add_row(
-                str(album.id),
-                album.source_title,
-                album.source_type,
+                str(album.album_id or "N/A"),
+                title_text,
                 str(album.items),
-                f"{album.processed_items}/{album.items}",
+                f"{album.processed_items} [dim]{percentage_str}[/]",
                 "Yes" if album.shared else "No",
-                album.created_at.strftime("%Y-%m-%d %H:%M")
-                if album.created_at
-                else "N/A",
+                str(album.created_at)[:19] if album.created_at else "N/A",
             )
 
         console.print(table)

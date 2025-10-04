@@ -45,6 +45,8 @@ pip install immichporter
 # Show help
 immichporter --help
 
+playwright install # might be required the first time
+
 # login is required the first time, the session is saved
 immichporter gphotos login
 
@@ -52,8 +54,12 @@ immichporter gphotos login
 immichporter gphotos albums
 
 # add all photos for each album to the database
+# it can run multiple times and only processes the not fully processed albums again
 immichporter gphotos photos
-# multiple runs miht be needed until everything is correct!
+
+# multiple runs might be needed until everything is correct,
+# you can check with if every album is fully processed
+immichporter db show-albums --not-finished
 
 # see the database with https://sqlitebrowser.org
 sqlitebrowser immichporter.db
