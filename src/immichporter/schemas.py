@@ -7,13 +7,25 @@ from typing import List, Optional
 
 @dataclass
 class AlbumInfo:
-    """Information about a Google Photos album."""
+    """Information about a Google Photos album.
+
+    Attributes:
+        title: The title of the album
+        items: Total number of items in the album
+        shared: Whether the album is shared
+        url: URL of the album
+        album_id: Internal database ID of the album
+        processed_items: Number of items that have been processed
+        created_at: When the album was created in the database
+    """
 
     title: str
     items: int
     shared: bool
     url: str
     album_id: int | None = None
+    processed_items: int = 0
+    created_at: str | None = None
 
 
 @dataclass
