@@ -215,23 +215,31 @@ class GooglePhotosScraper:
                         "Could not find filename, make page reload and try again"
                     )
                     await self.page.reload(wait_until="domcontentloaded")
-                    await asyncio.sleep(1.0 * cnt)
+                    await asyncio.sleep(0.1 * cnt)
                     if cnt == 2:
-                        await self.keyboard_press("i", delay=0.1)
+                        await self.keyboard_press("i", delay=0.05)
 
             # Extract date information
-            date_text = await self._get_text_safely(
-                'div[aria-label*="Date taken"]', timeout=INFO_PANEL_TIMEOUT
-            )
-            time_element = await self.page.query_selector(
-                'span[aria-label*="Time taken"]'
-            )
-            time_text = await time_element.inner_text() if time_element else "N/A"
+            date_obj = None
+            cnt = 0
+            while date_obj is None and cnt < 4:
+                cnt += 1
+                if cnt == 2:
+                    await self.page.reload(wait_until="domcontentloaded")
+                    await asyncio.sleep(0.1 * cnt)
 
-            current_url = await self.page.evaluate("window.location.href")
-            source_id = current_url.split("/")[-1].split("?")[0]
-            # Parse date
-            date_obj, date_str = self._parse_date(f"{date_text} {time_text}")
+                date_text = await self._get_text_safely(
+                    'div[aria-label*="Date taken"]', timeout=INFO_PANEL_TIMEOUT
+                )
+                time_element = await self.page.query_selector(
+                    'span[aria-label*="Time taken"]'
+                )
+                time_text = await time_element.inner_text() if time_element else "N/A"
+
+                current_url = await self.page.evaluate("window.location.href")
+                source_id = current_url.split("/")[-1].split("?")[0]
+                # Parse date
+                date_obj, date_str = self._parse_date(f"{date_text} {time_text}")
 
             # Extract shared by information
             if album.shared:
@@ -277,7 +285,7 @@ class GooglePhotosScraper:
                     return visible_elements[0]
             except PlaywrightTimeoutError:
                 logger.warning(f"Timed out waiting for element: {selector}")
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.01)
         return None
 
     def _parse_date(self, date_str: str) -> tuple[datetime, str]:
@@ -399,16 +407,7 @@ class GooglePhotosScraper:
                 completed=processed_photos,
             )
 
-            photo_position = 1
             while processed_photos < album.items:
-                # go to the correct photo position (needed if some where already processed)
-                if photo_position < processed_photos:
-                    await self.keyboard_press(
-                        "ArrowRight", delay=IMAGE_NAVIGATION_DELAY
-                    )
-                    photo_position += 1
-                    continue
-
                 try:
                     picture_info = await self.get_picture_info(album)
 
@@ -469,15 +468,13 @@ class GooglePhotosScraper:
                                 album_id=album.album_id,
                             )
 
-                        # Photo was successfully inserted (not a duplicate)
-                        photo_position += 1
                         # Update processed items count
                         processed_photos += 1
+                        with get_db_session() as session:
+                            update_album_processed_items(
+                                session, album.album_id, processed_photos
+                            )
                         if photo_id is not None:
-                            with get_db_session() as session:
-                                update_album_processed_items(
-                                    session, album.album_id, processed_photos
-                                )
                             # Display progress for successfully processed photo
                             progress.update(
                                 task,
@@ -629,23 +626,39 @@ class GooglePhotosScraper:
         return albums_collected
 
     async def scrape_albums_from_db(
-        self, max_albums: int = None, start_album: int = 1
+        self,
+        max_albums: int | None = None,
+        start_album: int = 1,
+        album_ids: list[int] | None = None,
+        not_finished: bool = False,
     ) -> ProcessingResult:
-        """Process images from albums stored in the database."""
-        # await self.setup_browser()
+        """Process images from albums stored in the database.
 
+        Args:
+            max_albums: Maximum number of albums to process (ignored if album_id is provided)
+            start_album: Starting album position (1-based, ignored if album_id is provided)
+            album_ids: Specific album ID to process (overrides max_albums and start_album)
+        """
         await self.open_gphotos(path="albums")
         await self.get_default_user()  # save default user
 
-        console.print("Processing albums from database ...")
-        logger.info(f"Starting from album position {start_album}")
-        if max_albums:
-            logger.info(f"Maximum albums to process: {max_albums}")
-
         # Get albums from database
         with get_db_session() as session:
+            # Get albums with pagination
+            console.print("Processing albums from database ...")
+            logger.info(f"Starting from album position {start_album}")
+            if album_ids:
+                max_albums = None
+                start_album = 1
+
+            if max_albums:
+                logger.info(f"Maximum albums to process: {max_albums}")
             albums = get_albums_from_db(
-                session, limit=max_albums, offset=start_album - 1
+                session,
+                limit=max_albums,
+                offset=start_album - 1,
+                not_finished=not_finished,
+                album_ids=album_ids,
             )
 
         if not albums:
