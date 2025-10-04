@@ -430,14 +430,20 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
         try:
             table = table_models[name].__table__
 
-            # Handle cascading deletes
+            # SQLite doesn't support CASCADE in DROP TABLE
+            # First disable foreign key constraints
+            session.execute(text("PRAGMA foreign_keys = OFF"))
+
+            # If dropping albums, first delete all photos and errors that reference albums
             if name == "albums":
-                # First delete all photos and errors that reference albums
                 session.execute(text("DELETE FROM photos"))
                 session.execute(text("DELETE FROM errors"))
 
             # Drop the table
-            session.execute(text(f"DROP TABLE IF EXISTS {table.name} CASCADE"))
+            session.execute(text(f"DROP TABLE IF EXISTS {table.name}"))
+
+            # Re-enable foreign key constraints
+            session.execute(text("PRAGMA foreign_keys = ON"))
             session.commit()
 
             console.print(f"[green]Table '{name}' has been dropped.")
