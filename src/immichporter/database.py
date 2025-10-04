@@ -12,12 +12,17 @@ from immichporter.schemas import AlbumInfo
 
 console = Console()
 
+# Module-level variable to track if database has been initialized
+_database_initialized = False
+
 
 def get_db_session() -> Session:
     """Get a database session. Initializes and migrates the database if needed."""
-    # Always run init_database to handle both initialization and migrations
-    # The function is safe to run on existing databases and will only apply missing migrations
-    init_database()
+    global _database_initialized
+    if not _database_initialized:
+        # Initialize the database only once per session
+        init_database()
+        _database_initialized = True
     return SessionLocal()
 
 
@@ -50,7 +55,17 @@ def init_database(reset_db: bool = False) -> None:
                     "[yellow]Applied migration: Added add_to_immich column to users table[/yellow]"
                 )
 
-    console.print("[green]Database initialized and migrated successfully[/green]")
+        # Migration 2: Add immich_user_id column if it doesn't exist
+        if "immich_user_id" not in columns:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("ALTER TABLE users ADD COLUMN immich_user_id INTEGER")
+                )
+                console.print(
+                    "[yellow]Applied migration: Added immich_user_id column to users table[/yellow]"
+                )
+
+    logger.debug("Database initialized and migrated successfully")
 
 
 def insert_or_update_album(session: Session, album_info) -> int:
@@ -184,6 +199,11 @@ def album_exists(session: Session, album_title: str) -> bool:
 def get_album_photos_count(session: Session, album_id: int) -> int:
     """Get the number of photos for an album."""
     return session.query(Photo).filter_by(album_id=album_id).count()
+
+
+def get_album_processed_items(session: Session, album_id: int) -> int:
+    """Get the number of processed items for an album."""
+    return session.query(Album).filter_by(id=album_id).first().processed_items
 
 
 def update_album_processed_items(

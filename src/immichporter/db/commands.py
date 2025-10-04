@@ -146,6 +146,7 @@ def show_users():
         table.add_column("Source Name", style="magenta")
         table.add_column("Immich Name", style="green")
         table.add_column("Email", style="yellow")
+        table.add_column("Immich ID", style="cyan")
         table.add_column("Add to Immich", style="green")
         table.add_column("Created At", style="dim")
 
@@ -157,6 +158,7 @@ def show_users():
                 else user.source_name,
                 user.immich_name or "✗",
                 user.immich_email or "✗",
+                str(user.immich_user_id) if user.immich_user_id is not None else "✗",
                 "✓" if user.add_to_immich else "✗",
                 str(user.created_at)[:19] if user.created_at else "N/A",
             )

@@ -58,6 +58,7 @@ class User(Base):
     source_type = Column(String, nullable=False)  # 'gphoto', 'local', etc.
     immich_name = Column(String, unique=False, nullable=True)
     immich_email = Column(String, nullable=True)
+    immich_user_id = Column(Integer, nullable=True)
     add_to_immich = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=func.now())
     albums = relationship("Album", secondary="album_users", back_populates="users")
