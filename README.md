@@ -5,11 +5,9 @@
 <p align="center">
     <em>Google photos to immich importer helper</em>
 </p>
-<!--
 <p align="center">
     <b><a href="https://burgdev.github.io/immichporter">Documentation</a></b>
     | <b><a href="https://pypi.org/project/immichporter">PyPI</a></b>
-    -->
 </p>
 
 ---
