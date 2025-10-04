@@ -1,4 +1,4 @@
-"""Google Photos specific models and dataclasses."""
+"""Schemas for album and photos."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +13,7 @@ class AlbumInfo:
     items: int
     shared: bool
     url: str
+    album_id: int | None = None
 
 
 @dataclass

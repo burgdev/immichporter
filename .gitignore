@@ -1,4 +1,5 @@
-photos.db
+photos.db*
+immichporter.db*
 .infisical.json
 uv.lock
 .vscode

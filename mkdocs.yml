@@ -1,0 +1,199 @@
+site_name: Immichporter
+site_url: https://burgdev.github.io/immichporter
+
+repo_url: https://github.com/burgdev/immichporter
+repo_name: burgdev/immichporter
+
+nav:
+  - "Getting Started": index.md
+  #- "<i>immichporter</i>": cli.md
+  - API Reference:
+      - immichporter: reference/
+  - Packages: packages.md
+  - Changelog: changelog.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/burgdev/immichporter
+    - icon: fontawesome/brands/docker
+      link: https://ghcr.io/burgdev/immichporter
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/immichporter/
+
+theme:
+  name: material
+  #custom_dir: material/overrides
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    # - announce.dismiss
+    #- content.action.edit
+    #- content.action.view
+    - content.code.annotate
+    - content.code.copy
+    #- content.code.select
+    # - content.footnote.tooltips
+    # - content.tabs.link
+    - content.tooltips
+    # - header.autohide
+    - navigation.expand
+    # - navigation.footer
+    - navigation.indexes
+    # - navigation.instant
+    # - navigation.instant.prefetch
+    # - navigation.instant.progress
+    # - navigation.prune
+    #- navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+    - toc.integrate
+
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: brown
+      accent: deep-orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: brown
+      accent: deep-orange
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to system preference
+  font:
+    text: Roboto
+    code: Roboto Mono
+  favicon: assets/favicon.png
+  logo: assets/favicon.png
+  #icon:
+  #  logo: logo
+
+# Plugins
+plugins:
+  #  - blog
+  - open-in-new-tab:
+      add_icon: false
+  - search:
+      separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - gen-files:
+      scripts:
+        - tasks/gen_ref_pages.py
+  - literate-nav
+  - section-index
+  - termynal
+  #- mkdocs-autoapi: # does not work?
+  #    autoapi_dir: src
+  #    autoapi_keep_files: True
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            #show_root_toc_entry: true
+            #show_root_full_path: true
+            docstring_style: google
+            #separate_signature: true
+            #show_if_no_docstring: true
+            filters:
+              - "!^_[^_]"
+              - "!__all__"
+            #filters: ["!^_"]
+            docstring_section_style: list
+            heading_level: 1
+            inherited_members: true
+            merge_init_into_class: true
+            parameter_headings: true
+            preload_modules: [mkdocstrings]
+            relative_crossrefs: true
+            scoped_crossrefs: true
+            separate_signature: true
+            show_if_no_docstring: true
+            show_bases: false
+            show_inheritance_diagram: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            show_source: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: true
+            summary: true
+            unwrap_annotated: true
+            members_order: source
+            group_by_category: true
+            show_category_heading: true
+
+#  - minify:
+#      minify_html: true
+
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+  # Python Markdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+        #- pymdownx.highlight
+        #- pymdownx.inlinehilite
+
+
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  #- pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+  - mkdocs-click
+  #- pymdownx.blocks.admonition
+  #- pymdownx.blocks.details
+  #- pymdownx.blocks.tab
+
+watch:
+  - src
+  - README.md
+  - docs
+extra_css:
+  - css/custom.css

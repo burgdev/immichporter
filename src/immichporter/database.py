@@ -6,7 +6,9 @@ from typing import List, Dict, Any, Optional
 from rich.console import Console
 from loguru import logger
 
-from .models import Base, Album, User, Photo, Error, AlbumUser, SessionLocal
+from immichporter.models import Base, Album, User, Photo, Error, AlbumUser, SessionLocal
+
+from immichporter.schemas import AlbumInfo
 
 console = Console()
 
@@ -16,8 +18,10 @@ def get_db_session() -> Session:
     return SessionLocal()
 
 
-def init_database() -> None:
+def init_database(reset_db: bool = False) -> None:
     """Initialize the database."""
+    if reset_db:
+        Base.metadata.drop_all(bind=SessionLocal().bind)
     Base.metadata.create_all(bind=SessionLocal().bind)
     console.print("[green]Database initialized successfully[/green]")
 
@@ -44,6 +48,7 @@ def insert_or_update_album(session: Session, album_info) -> int:
         album = Album(
             source_title=album_info.title,
             source_type="gphoto",
+            immich_title=album_info.title,
             items=album_info.items,
             shared=album_info.shared,
             source_url=album_info.url,
@@ -164,10 +169,16 @@ def is_album_fully_processed(session: Session, album_id: int) -> bool:
 
 def get_albums_from_db(
     session: Session, limit: int = None, offset: int = 0
-) -> List[tuple]:
+) -> list[AlbumInfo]:
     """Get albums from database with pagination."""
     query = (
-        session.query(Album.id, Album.source_url, Album.source_title, Album.items)
+        session.query(
+            Album.id,
+            Album.source_url,
+            Album.source_title,
+            Album.items,
+            Album.shared,
+        )
         .filter_by(source_type="gphoto")
         .order_by(Album.id)
     )
@@ -175,7 +186,17 @@ def get_albums_from_db(
     if limit:
         query = query.offset(offset).limit(limit)
 
-    return query.all()
+    res = query.all()
+    return [
+        AlbumInfo(
+            album_id=album.id,
+            title=album.source_title,
+            items=album.items,
+            shared=album.shared,
+            url=album.source_url,
+        )
+        for album in res
+    ]
 
 
 def get_users_from_db(session: Session) -> List[User]:
