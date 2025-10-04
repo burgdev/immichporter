@@ -6,6 +6,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from rich.style import Style
+from sqlalchemy.orm import Session
+from immichporter.models import User
 from immichporter.database import (
     get_db_session,
     get_albums_from_db,
@@ -13,6 +15,35 @@ from immichporter.database import (
     get_database_stats,
     init_database,
 )
+
+
+def prompt_with_default(text: str, default: str) -> str:
+    """Prompt with a default value that can be edited using prompt_toolkit."""
+    from prompt_toolkit import prompt
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.keys import Keys
+
+    # Create custom key bindings
+    kb = KeyBindings()
+
+    @kb.add(Keys.Enter, eager=True)
+    def _(event):
+        """Accept the input."""
+        event.current_buffer.validate_and_handle()
+
+    try:
+        # Show the prompt with the default value pre-filled
+        result = prompt(
+            f"{text} ",
+            default=default,
+            key_bindings=kb,
+            pre_run=lambda: None,  # This is a workaround for prompt_toolkit
+        )
+        return result if result.strip() else default
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[red]Operation cancelled[/red]")
+        raise
+
 
 console = Console()
 
@@ -88,30 +119,95 @@ def show_users():
         users = get_users_from_db(session)
 
         if not users:
-            console.print("[yellow]No users found in database[/yellow]")
             return
 
         table = Table(title="Users")
         table.add_column("ID", style="cyan")
         table.add_column("Source Name", style="magenta")
-        table.add_column("Source Type", style="blue")
         table.add_column("Immich Name", style="green")
-        table.add_column("Immich Email", style="yellow")
+        table.add_column("Source Type", style="blue")
+        table.add_column("Email", style="yellow")
         table.add_column("Created", style="dim")
 
         for user in users:
             table.add_row(
                 str(user.id),
                 user.source_name,
+                user.immich_name or "[dim]Not set[/]",
                 user.source_type,
-                user.immich_name or "N/A",
-                user.immich_email or "N/A",
-                user.created_at.strftime("%Y-%m-%d %H:%M")
-                if user.created_at
-                else "N/A",
+                user.immich_email or "[dim]Not set[/]",
+                str(user.created_at)[:19],
             )
 
         console.print(table)
+
+
+def update_user_immich_name(session: Session, user_id: int, immich_name: str) -> None:
+    """Update a user's immich name."""
+    user = session.query(User).filter_by(id=user_id).first()
+    if user:
+        user.immich_name = immich_name or None
+        session.commit()
+
+
+@click.command()
+@click.option(
+    "--use-source-name",
+    is_flag=True,
+    help="Copy source name to immich name for all users",
+)
+@click.option(
+    "--interactive",
+    is_flag=True,
+    help="Interactively edit each user's immich name",
+)
+def edit_users(use_source_name: bool, interactive: bool):
+    """Edit user information in the database.
+
+    At least one of --use-source-name or --interactive must be provided.
+    """
+    if not (use_source_name or interactive):
+        console.print(
+            "[red]Error: At least one of --use-source-name or --interactive must be provided[/red]"
+        )
+        return
+
+    with get_db_session() as session:
+        users = get_users_from_db(session)
+        if not users:
+            console.print("[yellow]No users found in database[/yellow]")
+            return
+
+        if use_source_name:
+            console.print("\n[bold]Updating immich names from source names...[/]")
+            for user in users:
+                if not user.immich_name or user.immich_name != user.source_name:
+                    console.print(
+                        f"  - [cyan]{user.source_name}[/] -> [green]{user.source_name}[/]"
+                    )
+                    update_user_immich_name(session, user.id, user.source_name)
+            console.print("[green]✓ Done updating immich names[/]")
+
+        if interactive:
+            console.print("\n[bold]Interactive mode:[/]")
+            for user in users:
+                current = user.immich_name or user.source_name
+                # Show current name as pre-filled text that can be edited
+                console.print(
+                    f"\nUser [cyan]{user.id}[/] - Source: [magenta]{user.source_name}[/]"
+                )
+                try:
+                    new_name = prompt_with_default("Immich name: ", current)
+                except (KeyboardInterrupt, EOFError):
+                    return
+                if new_name.strip() and new_name != user.immich_name:
+                    update_user_immich_name(session, user.id, new_name)
+                    console.print(f"  → Updated to: [green]{new_name}[/]")
+                else:
+                    console.print("  [dim]No changes made[/]")
+
+        console.print("\n[bold]Updated users:[/]")
+        show_users.callback()
 
 
 @click.command()

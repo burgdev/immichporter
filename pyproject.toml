@@ -24,6 +24,7 @@ dependencies = [
   "sqlalchemy",
   "loguru",
   "platformdirs>=4.4.0",
+  "prompt-toolkit>=3.0.52",
 ]
 
 [project.scripts]

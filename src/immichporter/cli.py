@@ -5,7 +5,13 @@ from rich.console import Console
 
 # Import subcommands
 from immichporter.gphotos.commands import login, albums, photos
-from immichporter.db.commands import show_albums, show_users, show_stats, init
+from immichporter.db.commands import (
+    show_albums,
+    show_users,
+    show_stats,
+    init,
+    edit_users,
+)
 from immichporter.immich.commands import create_album, import_photos
 
 console = Console()
@@ -47,6 +53,7 @@ db.add_command(show_albums)
 db.add_command(show_users)
 db.add_command(show_stats)
 db.add_command(init)
+db.add_command(edit_users, name="edit-users")
 immich.add_command(create_album)
 immich.add_command(import_photos)
 
