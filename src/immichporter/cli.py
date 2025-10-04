@@ -11,6 +11,7 @@ from immichporter.db.commands import (
     show_stats,
     init,
     edit_users,
+    drop_command,
 )
 from immichporter.immich.commands import create_album, import_photos
 
@@ -48,11 +49,12 @@ gphotos.add_command(albums)
 gphotos.add_command(photos)
 
 # Register database commands
-db.add_command(init, name="init")
 db.add_command(show_albums, name="show-albums")
 db.add_command(show_users, name="show-users")
 db.add_command(show_stats, name="show-stats")
+db.add_command(init)
 db.add_command(edit_users, name="edit-users")
+db.add_command(drop_command, name="drop")
 
 # Register Immich commands
 immich.add_command(create_album, name="create-album")

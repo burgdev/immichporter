@@ -6,7 +6,7 @@ from .commands import (
     show_users,
     edit_users,
     show_stats,
-    drop_command as drop,
+    drop_command,
 )
 
 __all__ = [
@@ -15,5 +15,5 @@ __all__ = [
     "show_users",
     "edit_users",
     "show_stats",
-    "drop",
+    "drop_command",
 ]

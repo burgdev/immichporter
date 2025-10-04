@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from immichporter.models import User, Album, Photo, Error
-from immichporter.database import engine, Base
+from immichporter.database import Base, SessionLocal
 from immichporter.database import (
     get_db_session,
     get_albums_from_db,
@@ -401,6 +401,7 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
         with get_db_session() as session:
             try:
                 # Drop all tables
+                engine = SessionLocal().bind
                 Base.metadata.drop_all(bind=engine)
                 console.print("[green]All tables have been dropped.")
 
@@ -409,7 +410,6 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
                 console.print("A new empty database has been initialized.")
 
             except Exception as e:
-                session.rollback()
                 console.print(f"[red]Error dropping tables: {str(e)}")
         return
 
@@ -443,7 +443,8 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
             console.print(f"[green]Table '{name}' has been dropped.")
 
             # Recreate the table
-            Base.metadata.create_all(engine, tables=[table])
+            engine = SessionLocal().bind
+            Base.metadata.create_all(bind=engine, tables=[table])
             console.print(f"Table '{name}' has been recreated (empty).")
 
         except SQLAlchemyError as e:
@@ -456,7 +457,10 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
 
 @click.command("drop")
 @click.option(
-    "-n", "--name", help="Name of the table to drop (albums, photos, users, errors)"
+    "-n",
+    "--name",
+    type=click.Choice(["albums", "photos", "users", "errors"], case_sensitive=False),
+    help="Name of the table to drop (albums, photos, users, errors)",
 )
 @click.option(
     "-a",
