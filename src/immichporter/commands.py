@@ -47,7 +47,7 @@ def configure_logging(log_level):
     logger.add(
         lambda msg: print(msg, end=""),
         level=log_level.upper(),
-        format="<green>{time:HH:mm:ss}</green> <level>{level: <8}</level><level>{message}</level>",
+        format="<green>{time:HH:mm:ss}</green> <level>{level: <8}</level>{message}",
         colorize=True,
     )
     logger.info(f"Logging level set to: {log_level}")

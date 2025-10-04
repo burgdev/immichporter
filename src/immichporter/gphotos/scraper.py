@@ -31,11 +31,11 @@ console = Console()
 
 # Configuration constants
 DEFAULT_TIMEOUT = 10000
-INFO_PANEL_TIMEOUT = 10000
+INFO_PANEL_TIMEOUT = 4000
 ALBUM_NAVIGATION_DELAY = 0
-IMAGE_NAVIGATION_DELAY = 0.05
-DUPLICATE_ERROR_THRESHOLD = 7
-DUPLICATE_NEXT_IMAGE_THRESHOLD = 4
+IMAGE_NAVIGATION_DELAY = 0.2
+DUPLICATE_ERROR_THRESHOLD = 10
+DUPLICATE_NEXT_IMAGE_THRESHOLD = 6
 MAX_ALBUMS = 0
 
 STEALTH_ARGS = [
@@ -216,7 +216,7 @@ class GooglePhotosScraper:
                     )
                     await self.page.reload(wait_until="domcontentloaded")
                     await asyncio.sleep(0.1 * cnt)
-                    if cnt == 2:
+                    if cnt == 3:
                         await self.keyboard_press("i", delay=0.05)
 
             # Extract date information
@@ -224,9 +224,6 @@ class GooglePhotosScraper:
             cnt = 0
             while date_obj is None and cnt < 4:
                 cnt += 1
-                if cnt == 2:
-                    await self.page.reload(wait_until="domcontentloaded")
-                    await asyncio.sleep(0.1 * cnt)
 
                 date_text = await self._get_text_safely(
                     'div[aria-label*="Date taken"]', timeout=INFO_PANEL_TIMEOUT
@@ -240,6 +237,10 @@ class GooglePhotosScraper:
                 source_id = current_url.split("/")[-1].split("?")[0]
                 # Parse date
                 date_obj, date_str = self._parse_date(f"{date_text} {time_text}")
+                if date_obj is None:
+                    logger.info("Could not find date, make page reload and try again")
+                    await self.page.reload(wait_until="domcontentloaded")
+                    await asyncio.sleep(0.1 * cnt)
 
             # Extract shared by information
             if album.shared:
@@ -388,8 +389,10 @@ class GooglePhotosScraper:
 
         # Get picture info for the first image after navigation
         picture_info = await self.get_picture_info(album)
+        logger.debug(f"Picture info before processing: {picture_info}")
         pictures = []
         last_source_id = None
+        last_filename = None
         duplicate_count = 0
         processed_users = set()
 
@@ -410,10 +413,19 @@ class GooglePhotosScraper:
             while processed_photos < album.items:
                 try:
                     picture_info = await self.get_picture_info(album)
+                    logger.debug(f"Picture info: {picture_info}")
 
                     if not picture_info:
                         logger.error("Could not extract info for current image")
                         break
+                    if picture_info.filename == last_filename:
+                        logger.debug(
+                            "Filename did not change, waiting a bit longer and try again ..."
+                        )
+                        # sometimes it takes longer until the filename is updated, in this case we wait a bit more.
+                        await asyncio.sleep(0.8)
+                        picture_info = await self.get_picture_info(album)
+                        logger.debug(f"Picture info 2: {picture_info}")
 
                     # Check for duplicates to detect end of album
                     if (
@@ -421,12 +433,18 @@ class GooglePhotosScraper:
                         and picture_info.source_id != ""
                     ):
                         duplicate_count += 1
+                        logger.debug(
+                            f"Duplicate count: {duplicate_count}, source id: '{picture_info.source_id}, last source id: '{last_source_id}'"
+                        )
                         progress.update(
                             task,
                             advance=0,
                             description=f"[green]{processed_photos}/{album.items} - {picture_info.filename}[/green] [red](taking a bit longer {'.'*duplicate_count})[/red]",
                         )
                         if duplicate_count >= DUPLICATE_NEXT_IMAGE_THRESHOLD:
+                            logger.warn(
+                                "Probably missed an 'arrowright' key press, try one more ..."
+                            )
                             await self.keyboard_press(
                                 "ArrowRight", delay=IMAGE_NAVIGATION_DELAY
                             )
@@ -442,6 +460,7 @@ class GooglePhotosScraper:
 
                     # New picture found
                     last_source_id = picture_info.source_id
+                    last_filename = picture_info.filename
                     pictures.append(picture_info)
                     duplicate_count = 0
 
