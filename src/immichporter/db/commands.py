@@ -268,29 +268,30 @@ def edit_users(domain: str = None, all: bool = False, user_id: int = None):
 
             try:
                 # Toggle add_to_immich
-                current_status = "enabled" if user.add_to_immich else "disabled"
+                current_status = "yes" if user.add_to_immich else "no"
                 enable = prompt_with_default(
                     f"Include in Immich? [current: {current_status}]",
                     "y" if user.add_to_immich else "n",
                 )
 
-                # Edit name - use source_name as default if immich_name is not set
-                current_name = (
-                    user.immich_name
-                    if user.immich_name is not None
-                    else user.source_name
-                )
-                new_name = prompt_with_default("  Immich name: ", current_name)
-                # If user enters a single dot, clear the name
-                if new_name.strip() == ".":
-                    new_name = ""
-                if new_name != user.immich_name:
-                    update_user_immich_name(
-                        session, user.id, new_name if new_name.strip() else None
+                if enable == "y":
+                    # Edit name - use source_name as default if immich_name is not set
+                    current_name = (
+                        user.immich_name
+                        if user.immich_name is not None
+                        else user.source_name
                     )
-                    console.print(
-                        f"  → Updated name to: [green]{new_name if new_name else '✗'}[/]"
-                    )
+                    new_name = prompt_with_default("  Immich name: ", current_name)
+                    # If user enters a single dot, clear the name
+                    if new_name.strip() == ".":
+                        new_name = ""
+                    if new_name != user.immich_name:
+                        update_user_immich_name(
+                            session, user.id, new_name if new_name.strip() else None
+                        )
+                        console.print(
+                            f"  → Updated name to: [green]{new_name if new_name else '✗'}[/]"
+                        )
 
                 if enable.lower() == "y" or (enable == "" and user.add_to_immich):
                     # User is enabled for Immich
