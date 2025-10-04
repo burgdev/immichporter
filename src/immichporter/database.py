@@ -225,7 +225,11 @@ def is_album_fully_processed(session: Session, album_id: int) -> bool:
 
 
 def get_albums_from_db(
-    session: Session, limit: int = None, offset: int = 0, not_finished: bool = False
+    session: Session,
+    limit: int | None = None,
+    offset: int = 0,
+    not_finished: bool = False,
+    album_ids: list[int] | None = None,
 ) -> list[AlbumInfo]:
     """Get albums from database with pagination.
 
@@ -252,6 +256,9 @@ def get_albums_from_db(
 
     if limit:
         query = query.offset(offset).limit(limit)
+
+    if album_ids:
+        query = query.filter(Album.id.in_(album_ids))
 
     res = query.all()
     return [

@@ -5,9 +5,11 @@ import math
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
-from rich.style import Style
+from sqlalchemy import text
 from sqlalchemy.orm import Session
-from immichporter.models import User
+from sqlalchemy.exc import SQLAlchemyError
+from immichporter.models import User, Album, Photo, Error
+from immichporter.database import Base, SessionLocal
 from immichporter.database import (
     get_db_session,
     get_albums_from_db,
@@ -16,6 +18,7 @@ from immichporter.database import (
     init_database,
 )
 from immichporter.utils import sanitize_for_email
+from immichporter.commands import logging_options, configure_logging
 
 
 def prompt_with_default(text: str, default: str = None) -> str:
@@ -68,20 +71,24 @@ console = Console()
 
 
 @click.command()
-def init():
+@logging_options
+def init(log_level: str):
     """Initialize the database."""
+    configure_logging(log_level)
     init_database()
 
 
 @click.command()
+@logging_options
 @click.option(
     "-n",
     "--not-finished",
     is_flag=True,
     help="Show only albums that are not fully processed",
 )
-def show_albums(not_finished):
+def show_albums(not_finished, log_level: str):
     """Show albums in the database."""
+    configure_logging(log_level)
     with get_db_session() as session:
         albums = get_albums_from_db(session, not_finished=not_finished)
 
@@ -117,7 +124,7 @@ def show_albums(not_finished):
             title_text = Text(album.title)
             if hasattr(album, "url") and album.url:
                 title_text.stylize(f"link {album.url}")
-                title_text.append(" 🔗", style=Style(dim=True))
+                # title_text.append(" 🔗", style=Style(dim=True))
 
             table.add_row(
                 str(album.album_id or "N/A"),
@@ -132,8 +139,10 @@ def show_albums(not_finished):
 
 
 @click.command()
-def show_users():
+@logging_options
+def show_users(log_level: str):
     """Show all users in the database."""
+    configure_logging(log_level)
     with get_db_session() as session:
         users = get_users_from_db(session)
 
@@ -213,13 +222,16 @@ def update_user_add_to_immich(
     type=int,
     help="Edit a specific user by ID",
 )
-def edit_users(domain: str = None, all: bool = False, user_id: int = None):
+@logging_options
+def edit_users(
+    domain: str = None, all: bool = False, user_id: int = None, log_level: str = "INFO"
+):
     """Interactively edit user information in the database.
 
     By default, only shows users added to Immich without an email.
     Use --all to show all users, or --user-id to edit a specific user.
     """
-
+    configure_logging(log_level)
     with get_db_session() as session:
         if user_id is not None:
             # Edit specific user by ID
@@ -328,33 +340,139 @@ def edit_users(domain: str = None, all: bool = False, user_id: int = None):
 
 
 @click.command()
-def show_stats():
+@logging_options
+def show_stats(log_level: str):
     """Show database statistics."""
+    configure_logging(log_level)
     with get_db_session() as session:
         stats = get_database_stats(session)
 
-        console.print("[bold green]Database Statistics[/bold green]")
-        console.print(f"Total Albums: {len(stats['albums'])}")
-        console.print(f"Total Users: {stats['user_count']}")
-        console.print(f"Total Photos: {stats['total_photos']}")
-        console.print(f"Total Errors: {stats['total_errors']}")
+        # Create a table for statistics
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Statistic", style="dim", width=30)
+        table.add_column("Count", justify="right")
 
-        if stats["albums"]:
-            console.print("\n[bold blue]Album Details[/bold blue]")
-            table = Table()
-            table.add_column("Album", style="magenta")
-            table.add_column("Type", style="blue")
-            table.add_column("Items", style="green")
-            table.add_column("Photos", style="yellow")
-            table.add_column("Errors", style="red")
+        # Add database stats
+        table.add_row("Total Albums", str(stats["total_albums"]))
+        table.add_row("Total Photos", str(stats["total_photos"]))
+        table.add_row("Total Users", str(stats["total_users"]))
+        table.add_row("Total Errors", str(stats["total_errors"]))
 
-            for album_stat in stats["albums"]:
-                table.add_row(
-                    album_stat.source_title,
-                    album_stat.source_type,
-                    str(album_stat.items),
-                    str(album_stat.photo_count),
-                    str(album_stat.error_count),
-                )
+        # Add album stats if available
+        if "album_stats" in stats:
+            table.add_section()
+            table.add_row("[bold]Album Statistics[/bold]", "")
+            for album_name, count in stats["album_stats"].items():
+                table.add_row(f"  {album_name}", str(count))
 
-            console.print(table)
+        # Add user stats if available
+        if "user_stats" in stats:
+            table.add_section()
+            table.add_row("[bold]User Statistics[/bold]", "")
+            for user_name, count in stats["user_stats"].items():
+                table.add_row(f"  {user_name}", str(count))
+
+        console.print(table)
+
+
+def drop_table(name: str, all_tables: bool = False, force: bool = False):
+    """Drop database tables or the entire database file.
+
+    Args:
+        name: Name of the table to drop (albums, photos, users, errors)
+        all_tables: If True, drop all tables
+        force: If True, don't ask for confirmation
+    """
+    if not any([name, all_tables]):
+        console.print("[red]Error: Please specify a table name or use --all")
+        return
+
+    # Map table names to their models
+    table_models = {"albums": Album, "photos": Photo, "users": User, "errors": Error}
+
+    if all_tables:
+        if not force:
+            if not click.confirm(
+                "Are you sure you want to drop ALL tables? This cannot be undone."
+            ):
+                console.print("Operation cancelled.")
+                return
+
+        with get_db_session() as session:
+            try:
+                # Drop all tables
+                engine = SessionLocal().bind
+                Base.metadata.drop_all(bind=engine)
+                console.print("[green]All tables have been dropped.")
+
+                # Recreate all tables
+                Base.metadata.create_all(bind=engine)
+                console.print("A new empty database has been initialized.")
+
+            except Exception as e:
+                console.print(f"[red]Error dropping tables: {str(e)}")
+        return
+
+    if name not in table_models:
+        console.print(
+            f"[red]Error: Invalid table name: {name}. Must be one of: {', '.join(table_models.keys())}"
+        )
+        return
+
+    if not force:
+        if not click.confirm(
+            f"Are you sure you want to drop the '{name}' table? This cannot be undone."
+        ):
+            console.print("Operation cancelled.")
+            return
+
+    with get_db_session() as session:
+        try:
+            table = table_models[name].__table__
+
+            # Handle cascading deletes
+            if name == "albums":
+                # First delete all photos and errors that reference albums
+                session.execute(text("DELETE FROM photos"))
+                session.execute(text("DELETE FROM errors"))
+
+            # Drop the table
+            session.execute(text(f"DROP TABLE IF EXISTS {table.name} CASCADE"))
+            session.commit()
+
+            console.print(f"[green]Table '{name}' has been dropped.")
+
+            # Recreate the table
+            engine = SessionLocal().bind
+            Base.metadata.create_all(bind=engine, tables=[table])
+            console.print(f"Table '{name}' has been recreated (empty).")
+
+        except SQLAlchemyError as e:
+            session.rollback()
+            console.print(f"[red]Error dropping table: {str(e)}")
+        except Exception as e:
+            session.rollback()
+            console.print(f"[red]Unexpected error: {str(e)}")
+
+
+@click.command("drop")
+@click.option(
+    "-n",
+    "--name",
+    type=click.Choice(["albums", "photos", "users", "errors"], case_sensitive=False),
+    help="Name of the table to drop (albums, photos, users, errors)",
+)
+@click.option(
+    "-a",
+    "--all",
+    "all_tables",
+    is_flag=True,
+    help="Drop all tables and recreate the database",
+)
+@click.option("-f", "--force", "force", is_flag=True, help="Skip confirmation prompt")
+@logging_options
+@click.pass_context
+def drop_command(ctx, name: str, all_tables: bool, force: bool, log_level: str):
+    """Drop database tables or the entire database."""
+    configure_logging(log_level)
+    drop_table(name, all_tables, force)

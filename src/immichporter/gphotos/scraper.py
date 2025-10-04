@@ -31,11 +31,11 @@ console = Console()
 
 # Configuration constants
 DEFAULT_TIMEOUT = 10000
-INFO_PANEL_TIMEOUT = 10000
+INFO_PANEL_TIMEOUT = 4000
 ALBUM_NAVIGATION_DELAY = 0
-IMAGE_NAVIGATION_DELAY = 0.05
-DUPLICATE_ERROR_THRESHOLD = 7
-DUPLICATE_NEXT_IMAGE_THRESHOLD = 4
+IMAGE_NAVIGATION_DELAY = 0.1
+DUPLICATE_ERROR_THRESHOLD = 10
+DUPLICATE_NEXT_IMAGE_THRESHOLD = 6
 MAX_ALBUMS = 0
 
 STEALTH_ARGS = [
@@ -215,23 +215,32 @@ class GooglePhotosScraper:
                         "Could not find filename, make page reload and try again"
                     )
                     await self.page.reload(wait_until="domcontentloaded")
-                    await asyncio.sleep(1.0 * cnt)
-                    if cnt == 2:
-                        await self.keyboard_press("i", delay=0.1)
+                    await asyncio.sleep(0.1 * cnt)
+                    if cnt == 3:
+                        await self.keyboard_press("i", delay=0.05)
 
             # Extract date information
-            date_text = await self._get_text_safely(
-                'div[aria-label*="Date taken"]', timeout=INFO_PANEL_TIMEOUT
-            )
-            time_element = await self.page.query_selector(
-                'span[aria-label*="Time taken"]'
-            )
-            time_text = await time_element.inner_text() if time_element else "N/A"
+            date_obj = None
+            cnt = 0
+            while date_obj is None and cnt < 4:
+                cnt += 1
 
-            current_url = await self.page.evaluate("window.location.href")
-            source_id = current_url.split("/")[-1].split("?")[0]
-            # Parse date
-            date_obj, date_str = self._parse_date(f"{date_text} {time_text}")
+                date_text = await self._get_text_safely(
+                    'div[aria-label*="Date taken"]', timeout=INFO_PANEL_TIMEOUT
+                )
+                time_element = await self.page.query_selector(
+                    'span[aria-label*="Time taken"]'
+                )
+                time_text = await time_element.inner_text() if time_element else "N/A"
+
+                current_url = await self.page.evaluate("window.location.href")
+                source_id = current_url.split("/")[-1].split("?")[0]
+                # Parse date
+                date_obj, date_str = self._parse_date(f"{date_text} {time_text}")
+                if date_obj is None:
+                    logger.info("Could not find date, make page reload and try again")
+                    await self.page.reload(wait_until="domcontentloaded")
+                    await asyncio.sleep(0.1 * cnt)
 
             # Extract shared by information
             if album.shared:
@@ -277,7 +286,7 @@ class GooglePhotosScraper:
                     return visible_elements[0]
             except PlaywrightTimeoutError:
                 logger.warning(f"Timed out waiting for element: {selector}")
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.01)
         return None
 
     def _parse_date(self, date_str: str) -> tuple[datetime, str]:
@@ -380,8 +389,10 @@ class GooglePhotosScraper:
 
         # Get picture info for the first image after navigation
         picture_info = await self.get_picture_info(album)
+        logger.debug(f"Picture info before processing: {picture_info}")
         pictures = []
         last_source_id = None
+        last_filename = None
         duplicate_count = 0
         processed_users = set()
 
@@ -399,22 +410,22 @@ class GooglePhotosScraper:
                 completed=processed_photos,
             )
 
-            photo_position = 1
             while processed_photos < album.items:
-                # go to the correct photo position (needed if some where already processed)
-                if photo_position < processed_photos:
-                    await self.keyboard_press(
-                        "ArrowRight", delay=IMAGE_NAVIGATION_DELAY
-                    )
-                    photo_position += 1
-                    continue
-
                 try:
                     picture_info = await self.get_picture_info(album)
+                    logger.debug(f"Picture info: {picture_info}")
 
                     if not picture_info:
                         logger.error("Could not extract info for current image")
                         break
+                    if picture_info.filename == last_filename:
+                        logger.debug(
+                            "Filename did not change, waiting a bit longer and try again ..."
+                        )
+                        # sometimes it takes longer until the filename is updated, in this case we wait a bit more.
+                        await asyncio.sleep(0.8)
+                        picture_info = await self.get_picture_info(album)
+                        logger.debug(f"Picture info 2: {picture_info}")
 
                     # Check for duplicates to detect end of album
                     if (
@@ -422,12 +433,18 @@ class GooglePhotosScraper:
                         and picture_info.source_id != ""
                     ):
                         duplicate_count += 1
+                        logger.debug(
+                            f"Duplicate count: {duplicate_count}, source id: '{picture_info.source_id}, last source id: '{last_source_id}'"
+                        )
                         progress.update(
                             task,
                             advance=0,
                             description=f"[green]{processed_photos}/{album.items} - {picture_info.filename}[/green] [red](taking a bit longer {'.'*duplicate_count})[/red]",
                         )
                         if duplicate_count >= DUPLICATE_NEXT_IMAGE_THRESHOLD:
+                            logger.warn(
+                                "Probably missed an 'arrowright' key press, try one more ..."
+                            )
                             await self.keyboard_press(
                                 "ArrowRight", delay=IMAGE_NAVIGATION_DELAY
                             )
@@ -443,6 +460,7 @@ class GooglePhotosScraper:
 
                     # New picture found
                     last_source_id = picture_info.source_id
+                    last_filename = picture_info.filename
                     pictures.append(picture_info)
                     duplicate_count = 0
 
@@ -469,15 +487,13 @@ class GooglePhotosScraper:
                                 album_id=album.album_id,
                             )
 
-                        # Photo was successfully inserted (not a duplicate)
-                        photo_position += 1
                         # Update processed items count
                         processed_photos += 1
+                        with get_db_session() as session:
+                            update_album_processed_items(
+                                session, album.album_id, processed_photos
+                            )
                         if photo_id is not None:
-                            with get_db_session() as session:
-                                update_album_processed_items(
-                                    session, album.album_id, processed_photos
-                                )
                             # Display progress for successfully processed photo
                             progress.update(
                                 task,
@@ -629,23 +645,39 @@ class GooglePhotosScraper:
         return albums_collected
 
     async def scrape_albums_from_db(
-        self, max_albums: int = None, start_album: int = 1
+        self,
+        max_albums: int | None = None,
+        start_album: int = 1,
+        album_ids: list[int] | None = None,
+        not_finished: bool = False,
     ) -> ProcessingResult:
-        """Process images from albums stored in the database."""
-        # await self.setup_browser()
+        """Process images from albums stored in the database.
 
+        Args:
+            max_albums: Maximum number of albums to process (ignored if album_id is provided)
+            start_album: Starting album position (1-based, ignored if album_id is provided)
+            album_ids: Specific album ID to process (overrides max_albums and start_album)
+        """
         await self.open_gphotos(path="albums")
         await self.get_default_user()  # save default user
 
-        console.print("Processing albums from database ...")
-        logger.info(f"Starting from album position {start_album}")
-        if max_albums:
-            logger.info(f"Maximum albums to process: {max_albums}")
-
         # Get albums from database
         with get_db_session() as session:
+            # Get albums with pagination
+            console.print("Processing albums from database ...")
+            logger.info(f"Starting from album position {start_album}")
+            if album_ids:
+                max_albums = None
+                start_album = 1
+
+            if max_albums:
+                logger.info(f"Maximum albums to process: {max_albums}")
             albums = get_albums_from_db(
-                session, limit=max_albums, offset=start_album - 1
+                session,
+                limit=max_albums,
+                offset=start_album - 1,
+                not_finished=not_finished,
+                album_ids=album_ids,
             )
 
         if not albums:

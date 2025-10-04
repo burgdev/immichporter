@@ -21,7 +21,7 @@ console = Console()
 
 
 def album_options(func):
-    """Album options. Use variables `max_albums`, `start_album`, and `start_album_fresh` in your function."""
+    """Album options. Use variables `max_albums`, `start_album`, `start_album_fresh`, and `album_ids` in your function."""
     func = click.option(
         "-m",
         "--max-albums",
@@ -174,6 +174,19 @@ def albums(
 
 @click.command()
 @album_options
+@click.option(
+    "-a",
+    "--album-id",
+    type=int,
+    multiple=True,
+    help="Specific album ID to process (overrides max_albums and start_album)",
+)
+@click.option(
+    "-n",
+    "--not-finished",
+    is_flag=True,
+    help="Process only albums that have not been finished yet",
+)
 @database_options
 @logging_options
 @playwright_options
@@ -181,18 +194,29 @@ def photos(
     max_albums,
     start_album,
     start_album_fresh,
+    album_id,
+    not_finished,
     db_path,
     reset_db,
     log_level,
     clear_storage,
     profile_dir,
 ):
-    """Export photos from Google Photos albums."""
-    configure_logging(log_level)
-    max_albums = max_albums if max_albums > 0 else 100000
+    """Export photos from Google Photos albums.
 
-    if start_album < 1:
-        raise click.UsageError("Start album must be 1 or higher")
+    By default, processes all albums. Use --album-id to process specific albums.
+    """
+    configure_logging(log_level)
+    max_albums = max_albums if max_albums > 0 else None
+    album_ids = album_id if album_id else None
+
+    if not album_ids:  # Only validate start_album if not using album_ids
+        if start_album < 1:
+            raise click.UsageError("Start album must be 1 or higher")
+    elif start_album_fresh or start_album > 1:
+        console.print(
+            "[yellow]Note: --start-album and --start-album-fresh are ignored when using --album-id[/yellow]"
+        )
 
     async def run_scraper():
         scraper = await setup_scraper(
@@ -204,9 +228,12 @@ def photos(
         )
 
         try:
-            logger.info("Starting photo export...")
+            logger.info("Starting photo export for all albums...")
             await scraper.scrape_albums_from_db(
-                max_albums=max_albums, start_album=start_album
+                max_albums=max_albums,
+                start_album=start_album if not start_album_fresh else 1,
+                album_ids=album_ids,
+                not_finished=not_finished,
             )
 
             # Show database stats
