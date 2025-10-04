@@ -5,7 +5,6 @@ import math
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
-from rich.style import Style
 from sqlalchemy.orm import Session
 from immichporter.models import User
 from immichporter.database import (
@@ -16,6 +15,7 @@ from immichporter.database import (
     init_database,
 )
 from immichporter.utils import sanitize_for_email
+from immichporter.commands import logging_options, configure_logging
 
 
 def prompt_with_default(text: str, default: str = None) -> str:
@@ -68,20 +68,24 @@ console = Console()
 
 
 @click.command()
-def init():
+@logging_options
+def init(log_level: str):
     """Initialize the database."""
+    configure_logging(log_level)
     init_database()
 
 
 @click.command()
+@logging_options
 @click.option(
     "-n",
     "--not-finished",
     is_flag=True,
     help="Show only albums that are not fully processed",
 )
-def show_albums(not_finished):
+def show_albums(not_finished, log_level: str):
     """Show albums in the database."""
+    configure_logging(log_level)
     with get_db_session() as session:
         albums = get_albums_from_db(session, not_finished=not_finished)
 
@@ -117,7 +121,7 @@ def show_albums(not_finished):
             title_text = Text(album.title)
             if hasattr(album, "url") and album.url:
                 title_text.stylize(f"link {album.url}")
-                title_text.append(" 🔗", style=Style(dim=True))
+                # title_text.append(" 🔗", style=Style(dim=True))
 
             table.add_row(
                 str(album.album_id or "N/A"),
@@ -132,8 +136,10 @@ def show_albums(not_finished):
 
 
 @click.command()
-def show_users():
+@logging_options
+def show_users(log_level: str):
     """Show all users in the database."""
+    configure_logging(log_level)
     with get_db_session() as session:
         users = get_users_from_db(session)
 
@@ -213,13 +219,16 @@ def update_user_add_to_immich(
     type=int,
     help="Edit a specific user by ID",
 )
-def edit_users(domain: str = None, all: bool = False, user_id: int = None):
+@logging_options
+def edit_users(
+    domain: str = None, all: bool = False, user_id: int = None, log_level: str = "INFO"
+):
     """Interactively edit user information in the database.
 
     By default, only shows users added to Immich without an email.
     Use --all to show all users, or --user-id to edit a specific user.
     """
-
+    configure_logging(log_level)
     with get_db_session() as session:
         if user_id is not None:
             # Edit specific user by ID
@@ -328,8 +337,10 @@ def edit_users(domain: str = None, all: bool = False, user_id: int = None):
 
 
 @click.command()
-def show_stats():
+@logging_options
+def show_stats(log_level: str):
     """Show database statistics."""
+    configure_logging(log_level)
     with get_db_session() as session:
         stats = get_database_stats(session)
 
