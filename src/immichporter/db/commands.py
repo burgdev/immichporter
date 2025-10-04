@@ -246,20 +246,12 @@ def edit_users(domain: str = None, all: bool = False, user_id: int = None):
                         "[yellow]Showing only users added to Immich without email (use --all to show all users)[/yellow]"
                     )
                 else:
-                    # If no users match the filter, show all users added to Immich
-                    filtered_users = [u for u in users if u.add_to_immich]
-                    if filtered_users:
-                        users = filtered_users
-                        console.print(
-                            "[yellow]All users have emails. Showing users added to Immich (use --all to show all users)[/yellow]"
-                        )
-                    else:
-                        console.print(
-                            "[yellow]No users added to Immich found. Showing all users.[/yellow]"
-                        )
+                    users = []
+                    console.print(
+                        "[red]All users processed (use [yellow]--all[/yellow] to show all users)[/red]"
+                    )
 
         # Always run in interactive mode
-        console.print("\n[bold]Interactive mode:[/]")
         for user in users:
             console.print("\n" + "─" * 50)
             console.print(
@@ -327,8 +319,10 @@ def edit_users(domain: str = None, all: bool = False, user_id: int = None):
                     break
                 continue
 
-        console.print("\n[bold]Updated users:[/]")
-        show_users.callback()
+        console.print(
+            "Run [yellow]'immichporter db show-users'[/yellow] to see the updated users."
+        )
+        # show_users.callback()
 
 
 @click.command()
