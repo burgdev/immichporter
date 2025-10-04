@@ -14,16 +14,43 @@ console = Console()
 
 
 def get_db_session() -> Session:
-    """Get a database session."""
+    """Get a database session. Initializes and migrates the database if needed."""
+    # Always run init_database to handle both initialization and migrations
+    # The function is safe to run on existing databases and will only apply missing migrations
+    init_database()
     return SessionLocal()
 
 
 def init_database(reset_db: bool = False) -> None:
-    """Initialize the database."""
+    """Initialize the database and apply any necessary migrations."""
+    from sqlalchemy import inspect, text
+
+    engine = SessionLocal().bind
+
     if reset_db:
-        Base.metadata.drop_all(bind=SessionLocal().bind)
-    Base.metadata.create_all(bind=SessionLocal().bind)
-    console.print("[green]Database initialized successfully[/green]")
+        Base.metadata.drop_all(bind=engine)
+
+    # Create all tables if they don't exist
+    Base.metadata.create_all(bind=engine)
+
+    # Apply migrations
+    inspector = inspect(engine)
+
+    # Migration 1: Add add_to_immich column if it doesn't exist
+    if "users" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("users")]
+        if "add_to_immich" not in columns:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE users ADD COLUMN add_to_immich BOOLEAN DEFAULT TRUE NOT NULL"
+                    )
+                )
+                console.print(
+                    "[yellow]Applied migration: Added add_to_immich column to users table[/yellow]"
+                )
+
+    console.print("[green]Database initialized and migrated successfully[/green]")
 
 
 def insert_or_update_album(session: Session, album_info) -> int:
@@ -59,8 +86,16 @@ def insert_or_update_album(session: Session, album_info) -> int:
         return album.id
 
 
-def insert_or_update_user(session: Session, user_name: str) -> int:
-    """Insert or update a user."""
+def insert_or_update_user(
+    session: Session, user_name: str, add_to_immich: bool = True
+) -> int:
+    """Insert or update a user.
+
+    Args:
+        session: Database session
+        user_name: Name of the user in the source system
+        add_to_immich: Whether to include this user in Immich imports (default: True)
+    """
     # Check if user exists
     existing_user = (
         session.query(User)
@@ -73,10 +108,12 @@ def insert_or_update_user(session: Session, user_name: str) -> int:
         return existing_user.id
     else:
         # Insert new user
-        user = User(source_name=user_name, source_type="gphoto")
+        user = User(
+            source_name=user_name, source_type="gphoto", add_to_immich=add_to_immich
+        )
         session.add(user)
         session.commit()
-        logger.info(f"Added user: {user_name}")
+        logger.info(f"Added user: {user_name} (add_to_immich={add_to_immich})")
         return user.id
 
 
@@ -212,8 +249,17 @@ def get_albums_from_db(
 
 
 def get_users_from_db(session: Session) -> List[User]:
-    """Get all users from database."""
-    return session.query(User).filter_by(source_type="gphoto").all()
+    """Get all users from database.
+
+    Returns:
+        List[User]: List of User objects with all fields including add_to_immich
+    """
+    return (
+        session.query(User)
+        .order_by(User.source_name)
+        .filter_by(source_type="gphoto")
+        .all()
+    )
 
 
 def get_database_stats(session: Session) -> Dict[str, Any]:

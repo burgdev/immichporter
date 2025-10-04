@@ -42,20 +42,21 @@ def immich():
     pass
 
 
-# Register subcommands
+# Register Google Photos commands
 gphotos.add_command(login)
 gphotos.add_command(albums)
 gphotos.add_command(photos)
 
-
-# Register other commands
-db.add_command(show_albums)
-db.add_command(show_users)
-db.add_command(show_stats)
-db.add_command(init)
+# Register database commands
+db.add_command(init, name="init")
+db.add_command(show_albums, name="show-albums")
+db.add_command(show_users, name="show-users")
+db.add_command(show_stats, name="show-stats")
 db.add_command(edit_users, name="edit-users")
-immich.add_command(create_album)
-immich.add_command(import_photos)
+
+# Register Immich commands
+immich.add_command(create_album, name="create-album")
+immich.add_command(import_photos, name="import-photos")
 
 
 def main():
