@@ -47,6 +47,7 @@ dev = [
   "invoke>=2.2.0",
   "jinja2>=3.1.6",
   "loguru>=0.7.3",
+  "openapi-python-client>=0.26.1",
   "pillow>=11.3.0",
   "pre-commit>=4.0.1",
   "pyright>=1.1.0",

@@ -430,14 +430,26 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
         try:
             table = table_models[name].__table__
 
-            # Handle cascading deletes
-            if name == "albums":
-                # First delete all photos and errors that reference albums
-                session.execute(text("DELETE FROM photos"))
-                session.execute(text("DELETE FROM errors"))
+            # For SQLite, we need to handle foreign key constraints differently
+            if session.bind.dialect.name == "sqlite":
+                # SQLite doesn't support CASCADE in DROP TABLE
+                # First disable foreign key constraints
+                session.execute(text("PRAGMA foreign_keys = OFF"))
 
-            # Drop the table
-            session.execute(text(f"DROP TABLE IF EXISTS {table.name} CASCADE"))
+                # Drop the table
+                session.execute(text(f"DROP TABLE IF EXISTS {table.name}"))
+
+                # Re-enable foreign key constraints
+                session.execute(text("PRAGMA foreign_keys = ON"))
+            else:
+                # For other databases like PostgreSQL, handle cascading deletes
+                if name == "albums":
+                    # First delete all photos and errors that reference albums
+                    session.execute(text("DELETE FROM photos"))
+                    session.execute(text("DELETE FROM errors"))
+
+                # Drop the table with CASCADE for other databases
+                session.execute(text(f"DROP TABLE IF EXISTS {table.name} CASCADE"))
             session.commit()
 
             console.print(f"[green]Table '{name}' has been dropped.")
