@@ -1,6 +1,6 @@
 [project]
 name = "immichporter"
-version = "0.0.1"
+version = "0.0.2"
 description = "Import photos from various sources to Immich"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -1,9 +1,25 @@
+<!-- Auto generated. Run 'inv release' in order to update -->
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.0.2] - 2025-10-04
+
+#### 🚀 Features
+- Add db edit user command ([#4](https://github.com/burgdev/immichporter/pull/4))
+- Improve db show albums command ([#3](https://github.com/burgdev/immichporter/pull/3))
+
+#### 🏭 Refactor
+- Improve gphoto cli ([#5](https://github.com/burgdev/immichporter/pull/5))
+
+#### 📝 Documentation
+- Add documentation and pypi link to README. ([#2](https://github.com/burgdev/immichporter/pull/2))
+
+[0.0.2]: https://github.com/burgdev/immichporter/compare/v0.0.1..v0.0.2
 
 
 ## [0.0.1] - 2025-10-04
