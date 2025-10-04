@@ -5,8 +5,11 @@ import math
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
-from immichporter.models import User
+from sqlalchemy.exc import SQLAlchemyError
+from immichporter.models import User, Album, Photo, Error
+from immichporter.database import engine, Base
 from immichporter.database import (
     get_db_session,
     get_albums_from_db,
@@ -344,28 +347,128 @@ def show_stats(log_level: str):
     with get_db_session() as session:
         stats = get_database_stats(session)
 
-        console.print("[bold green]Database Statistics[/bold green]")
-        console.print(f"Total Albums: {len(stats['albums'])}")
-        console.print(f"Total Users: {stats['user_count']}")
-        console.print(f"Total Photos: {stats['total_photos']}")
-        console.print(f"Total Errors: {stats['total_errors']}")
+        # Create a table for statistics
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Statistic", style="dim", width=30)
+        table.add_column("Count", justify="right")
 
-        if stats["albums"]:
-            console.print("\n[bold blue]Album Details[/bold blue]")
-            table = Table()
-            table.add_column("Album", style="magenta")
-            table.add_column("Type", style="blue")
-            table.add_column("Items", style="green")
-            table.add_column("Photos", style="yellow")
-            table.add_column("Errors", style="red")
+        # Add database stats
+        table.add_row("Total Albums", str(stats["total_albums"]))
+        table.add_row("Total Photos", str(stats["total_photos"]))
+        table.add_row("Total Users", str(stats["total_users"]))
+        table.add_row("Total Errors", str(stats["total_errors"]))
 
-            for album_stat in stats["albums"]:
-                table.add_row(
-                    album_stat.source_title,
-                    album_stat.source_type,
-                    str(album_stat.items),
-                    str(album_stat.photo_count),
-                    str(album_stat.error_count),
-                )
+        # Add album stats if available
+        if "album_stats" in stats:
+            table.add_section()
+            table.add_row("[bold]Album Statistics[/bold]", "")
+            for album_name, count in stats["album_stats"].items():
+                table.add_row(f"  {album_name}", str(count))
 
-            console.print(table)
+        # Add user stats if available
+        if "user_stats" in stats:
+            table.add_section()
+            table.add_row("[bold]User Statistics[/bold]", "")
+            for user_name, count in stats["user_stats"].items():
+                table.add_row(f"  {user_name}", str(count))
+
+        console.print(table)
+
+
+def drop_table(name: str, all_tables: bool = False, force: bool = False):
+    """Drop database tables or the entire database file.
+
+    Args:
+        name: Name of the table to drop (albums, photos, users, errors)
+        all_tables: If True, drop all tables
+        force: If True, don't ask for confirmation
+    """
+    if not any([name, all_tables]):
+        console.print("[red]Error: Please specify a table name or use --all")
+        return
+
+    # Map table names to their models
+    table_models = {"albums": Album, "photos": Photo, "users": User, "errors": Error}
+
+    if all_tables:
+        if not force:
+            if not click.confirm(
+                "Are you sure you want to drop ALL tables? This cannot be undone."
+            ):
+                console.print("Operation cancelled.")
+                return
+
+        with get_db_session() as session:
+            try:
+                # Drop all tables
+                Base.metadata.drop_all(bind=engine)
+                console.print("[green]All tables have been dropped.")
+
+                # Recreate all tables
+                Base.metadata.create_all(bind=engine)
+                console.print("A new empty database has been initialized.")
+
+            except Exception as e:
+                session.rollback()
+                console.print(f"[red]Error dropping tables: {str(e)}")
+        return
+
+    if name not in table_models:
+        console.print(
+            f"[red]Error: Invalid table name: {name}. Must be one of: {', '.join(table_models.keys())}"
+        )
+        return
+
+    if not force:
+        if not click.confirm(
+            f"Are you sure you want to drop the '{name}' table? This cannot be undone."
+        ):
+            console.print("Operation cancelled.")
+            return
+
+    with get_db_session() as session:
+        try:
+            table = table_models[name].__table__
+
+            # Handle cascading deletes
+            if name == "albums":
+                # First delete all photos and errors that reference albums
+                session.execute(text("DELETE FROM photos"))
+                session.execute(text("DELETE FROM errors"))
+
+            # Drop the table
+            session.execute(text(f"DROP TABLE IF EXISTS {table.name} CASCADE"))
+            session.commit()
+
+            console.print(f"[green]Table '{name}' has been dropped.")
+
+            # Recreate the table
+            Base.metadata.create_all(engine, tables=[table])
+            console.print(f"Table '{name}' has been recreated (empty).")
+
+        except SQLAlchemyError as e:
+            session.rollback()
+            console.print(f"[red]Error dropping table: {str(e)}")
+        except Exception as e:
+            session.rollback()
+            console.print(f"[red]Unexpected error: {str(e)}")
+
+
+@click.command("drop")
+@click.option(
+    "-n", "--name", help="Name of the table to drop (albums, photos, users, errors)"
+)
+@click.option(
+    "-a",
+    "--all",
+    "all_tables",
+    is_flag=True,
+    help="Drop all tables and recreate the database",
+)
+@click.option("-f", "--force", "force", is_flag=True, help="Skip confirmation prompt")
+@logging_options
+@click.pass_context
+def drop_command(ctx, name: str, all_tables: bool, force: bool, log_level: str):
+    """Drop database tables or the entire database."""
+    configure_logging(log_level)
+    drop_table(name, all_tables, force)
