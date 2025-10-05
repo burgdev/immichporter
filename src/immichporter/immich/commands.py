@@ -1,16 +1,13 @@
 """Immich CLI commands."""
 
-import asyncio
 import click
 import functools
-import os
 from loguru import logger
 from immichporter.commands import logging_options
 from rich.console import Console
 from rich.table import Table
-from typing import Optional
 
-from immichporter.immich.client import ImmichAPI
+from immichporter.immich.immich import ImmichClient, immich_api_client
 
 console = Console()
 
@@ -46,77 +43,17 @@ def immich_options(f):
     )
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
-        os.environ["IMMICH_ENDPOINT"] = kwargs["endpoint"]
-        os.environ["IMMICH_API_KEY"] = kwargs["api_key"]
-        os.environ["IMMICH_INSECURE"] = "1" if kwargs["insecure"] else "0"
+        endpoint = kwargs["endpoint"]
+        api_key = kwargs["api_key"]
+        insecure = kwargs["insecure"]
+        client_api = immich_api_client(
+            endpoint=endpoint, api_key=api_key, insecure=insecure
+        )
+        kwargs["immich_api"] = client_api
+        kwargs["immich"] = ImmichClient(client=client_api)
         return f(*args, **kwargs)
 
     return wrapper
-
-
-async def list_albums_function(limit: int = 50, shared: Optional[bool] = None):
-    """List all albums on the Immich server.
-
-    Args:
-        endpoint: URL of the Immich server
-        api_key: API key for authentication
-        limit: Maximum number of albums to return
-        shared: Filter by shared status (True for shared, False for not shared, None for all)
-        insecure: If True, skip SSL certificate verification
-        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    """
-
-    endpoint = os.getenv("IMMICH_ENDPOINT")
-    api_key = os.getenv("IMMICH_API_KEY")
-    insecure = os.getenv("IMMICH_INSECURE") == "1"
-
-    console.print(f"\n[bold]Fetching albums from {endpoint}...[/bold]")
-    logger.info(f"Connecting to Immich server at {endpoint}")
-
-    try:
-        async with ImmichAPI(endpoint, api_key, verify_ssl=not insecure) as client:
-            logger.info("Fetching albums...")
-            albums = await client.get_all_albums()
-            logger.info(f"Retrieved {len(albums) if albums else 0} albums")
-
-            if not albums:
-                console.print("[yellow]No albums found.[/yellow]")
-                return
-
-            # Filter by shared status if specified
-            if shared is not None:
-                albums = [a for a in albums if a.shared == shared]
-
-            # Sort albums by name
-            albums = sorted(albums, key=lambda x: x.album_name.lower())
-
-            # Apply limit
-            if limit > 0:
-                albums = albums[:limit]
-
-            # Create and display the table
-            table = Table(show_header=True, header_style="bold magenta")
-            table.add_column("Album Name", style="cyan", no_wrap=True)
-            table.add_column("ID", style="dim")
-            table.add_column("Assets", justify="right")
-            table.add_column("Shared", justify="center")
-            table.add_column("Created At", style="dim")
-
-            for album in albums:
-                table.add_row(
-                    album.album_name,
-                    album.id,
-                    str(album.asset_count),
-                    "✓" if album.shared else "✗",
-                    album.created_at.strftime("%Y-%m-%d"),
-                )
-
-            console.print(table)
-            console.print(f"\n[green]Found {len(albums)} album(s)[/green]")
-
-    except Exception as e:
-        console.print(f"[red]Error: {str(e)}[/red]")
-        raise click.Abort()
 
 
 # Add commands to the immich group
@@ -127,12 +64,41 @@ async def list_albums_function(limit: int = 50, shared: Optional[bool] = None):
 )
 @click.option("--shared/--no-shared", default=None, help="Filter by shared status")
 @logging_options
-def list_albums(limit, shared, insecure, **options):
+def list_albums(immich: ImmichClient, limit, shared, **options):
     """List all albums on the Immich server."""
-    # configure_logging(log_level)
-    return asyncio.run(
-        list_albums_function(
-            limit=limit,
-            shared=shared,
-        )
-    )
+    logger.info(f"Fetching albums from '{immich.endpoint}'")
+
+    try:
+        albums = immich.get_albums(limit=limit, shared=shared)
+        logger.info(f"Retrieved {len(albums) if albums else 0} albums")
+
+        if not albums:
+            console.print("[red]No albums found.[/]")
+            return
+
+        # Create a table
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("ID", style="dim", width=36)
+        table.add_column("Album Name")
+        table.add_column("Asset Count")
+        table.add_column("Shared")
+        table.add_column("Created At")
+
+        for album in albums:
+            table.add_row(
+                str(album.id),
+                album.album_name,
+                str(album.asset_count),
+                "✓" if album.shared else "✗",
+                album.created_at.strftime("%Y-%m-%d %H:%M")
+                if hasattr(album, "created_at")
+                else "N/A",
+            )
+
+        console.print(table)
+        return albums
+
+    except Exception as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
+        logger.exception("Failed to fetch albums")
+        raise click.Abort()
