@@ -5,6 +5,8 @@ from rich.console import Console
 
 from loguru import logger
 
+import functools
+
 console = Console()
 
 
@@ -28,9 +30,24 @@ def database_options(func):
     return func
 
 
-def logging_options(func):
-    """Logging options. Use variable `log_level` in your function."""
-    func = click.option(
+# def logging_options(func):
+#    """Logging options. Use variable `log_level` in your function."""
+#    func = click.option(
+#        "-l",
+#        "--log-level",
+#        envvar="LOG_LEVEL",
+#        show_envvar=True,
+#        type=click.Choice(["debug", "info", "warning", "error"]),
+#        default="warning",
+#        help="Set the logging level",
+#    )(func)
+#    return func
+
+
+def logging_options(f):
+    """Common options for Immich commands."""
+
+    @click.option(
         "-l",
         "--log-level",
         envvar="LOG_LEVEL",
@@ -38,8 +55,13 @@ def logging_options(func):
         type=click.Choice(["debug", "info", "warning", "error"]),
         default="warning",
         help="Set the logging level",
-    )(func)
-    return func
+    )
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        configure_logging(kwargs["log_level"])
+        return f(*args, **kwargs)
+
+    return wrapper
 
 
 def configure_logging(log_level):

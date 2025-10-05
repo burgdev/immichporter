@@ -18,7 +18,10 @@ from immichporter.database import (
     init_database,
 )
 from immichporter.utils import sanitize_for_email
-from immichporter.commands import logging_options, configure_logging
+from immichporter.commands import logging_options
+
+
+cli_db = click.Group("db", help="Database commands")
 
 
 def prompt_with_default(text: str, default: str = None) -> str:
@@ -70,15 +73,14 @@ def prompt_with_default(text: str, default: str = None) -> str:
 console = Console()
 
 
-@click.command()
+@cli_db.command()
 @logging_options
 def init(log_level: str):
     """Initialize the database."""
-    configure_logging(log_level)
     init_database()
 
 
-@click.command()
+@cli_db.command()
 @logging_options
 @click.option(
     "-n",
@@ -88,7 +90,6 @@ def init(log_level: str):
 )
 def show_albums(not_finished, log_level: str):
     """Show albums in the database."""
-    configure_logging(log_level)
     with get_db_session() as session:
         albums = get_albums_from_db(session, not_finished=not_finished)
 
@@ -138,11 +139,10 @@ def show_albums(not_finished, log_level: str):
         console.print(table)
 
 
-@click.command()
+@cli_db.command()
 @logging_options
 def show_users(log_level: str):
     """Show all users in the database."""
-    configure_logging(log_level)
     with get_db_session() as session:
         users = get_users_from_db(session)
 
@@ -201,7 +201,7 @@ def update_user_add_to_immich(
         session.commit()
 
 
-@click.command()
+@cli_db.command()
 @click.option(
     "-d",
     "--domain",
@@ -231,7 +231,6 @@ def edit_users(
     By default, only shows users added to Immich without an email.
     Use --all to show all users, or --user-id to edit a specific user.
     """
-    configure_logging(log_level)
     with get_db_session() as session:
         if user_id is not None:
             # Edit specific user by ID
@@ -339,11 +338,10 @@ def edit_users(
         # show_users.callback()
 
 
-@click.command()
+@cli_db.command()
 @logging_options
 def show_stats(log_level: str):
     """Show database statistics."""
-    configure_logging(log_level)
     with get_db_session() as session:
         stats = get_database_stats(session)
 
@@ -455,7 +453,7 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
             console.print(f"[red]Unexpected error: {str(e)}")
 
 
-@click.command("drop")
+@cli_db.command("drop")
 @click.option(
     "-n", "--name", help="Name of the table to drop (albums, photos, users, errors)"
 )
@@ -471,5 +469,4 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
 @click.pass_context
 def drop_command(ctx, name: str, all_tables: bool, force: bool, log_level: str):
     """Drop database tables or the entire database."""
-    configure_logging(log_level)
     drop_table(name, all_tables, force)

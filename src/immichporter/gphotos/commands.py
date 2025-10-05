@@ -9,10 +9,10 @@ from loguru import logger
 from immichporter.database import get_db_session, get_database_stats, init_database
 from immichporter.gphotos.scraper import GooglePhotosScraper
 from immichporter.gphotos.settings import playwright_session_dir
-from immichporter.commands import logging_options, database_options, configure_logging
+from immichporter.commands import logging_options, database_options
 
 # Create a Click command group
-gphoto = click.Group("gphoto", help="Google Photos commands")
+cli_gphotos = click.Group("gphotos", help="Google Photos commands")
 
 console = Console()
 
@@ -92,12 +92,11 @@ async def setup_scraper(
         raise
 
 
-@click.command()
+@cli_gphotos.command()
 @logging_options
 @playwright_options
 def login(log_level, clear_storage, profile_dir):
     """Login to Google Photos and save the session."""
-    configure_logging(log_level)
 
     async def run_scraper_login():
         scraper = await setup_scraper(
@@ -116,7 +115,7 @@ def login(log_level, clear_storage, profile_dir):
     asyncio.run(run_scraper_login())
 
 
-@gphoto.command()
+@cli_gphotos.command()
 @album_options
 @database_options
 @logging_options
@@ -132,8 +131,6 @@ def albums(
     profile_dir,
 ):
     """List and export albums from Google Photos."""
-    configure_logging(log_level)
-
     max_albums = max_albums if max_albums > 0 else 100000
 
     if start_album < 1:
@@ -172,7 +169,7 @@ def albums(
     asyncio.run(run_scraper())
 
 
-@click.command()
+@cli_gphotos.command()
 @album_options
 @click.option(
     "-a",
@@ -206,7 +203,6 @@ def photos(
 
     By default, processes all albums. Use --album-id to process specific albums.
     """
-    configure_logging(log_level)
     max_albums = max_albums if max_albums > 0 else None
     album_ids = album_id if album_id else None
 
@@ -251,9 +247,3 @@ def photos(
             await scraper.close()
 
     asyncio.run(run_scraper())
-
-
-# Register commands
-gphoto.add_command(login)
-gphoto.add_command(albums)
-gphoto.add_command(photos)
