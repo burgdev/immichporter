@@ -177,3 +177,14 @@ def version(c: Ctx, next: bool = False):
         echo(new_version)
         return
     echo(version)
+
+
+@task(help={"version": "Update immich client to a specific version"})
+def update_immich_client(c: Ctx, version: str = "2.0.1"):
+    """Print current or next (--next) project version"""
+    version = version.replace("v", "")
+    url = f"https://raw.githubusercontent.com/immich-app/immich/refs/tags/v{version}/open-api/immich-openapi-specs.json"
+    output = "src/immichporter/immich/client/"
+    cmd = f"openapi-python-client generate --url {url} --meta none --output-path {output} --overwrite"
+    c.run(cmd, hide=True)
+    success(f"Updated immich client to version '{version}'.")
