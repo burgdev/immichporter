@@ -441,8 +441,8 @@ class GooglePhotosScraper:
                             advance=0,
                             description=f"[green]{processed_photos}/{album.items} - {picture_info.filename}[/green] [red](taking a bit longer {'.'*duplicate_count})[/red]",
                         )
-                        if duplicate_count >= DUPLICATE_NEXT_IMAGE_THRESHOLD:
-                            logger.warn(
+                        if duplicate_count == DUPLICATE_NEXT_IMAGE_THRESHOLD:
+                            logger.warning(
                                 "Probably missed an 'arrowright' key press, try one more ..."
                             )
                             await self.keyboard_press(
