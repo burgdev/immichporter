@@ -81,6 +81,7 @@ class Photo(Base):
     created_at = Column(DateTime, default=func.now())
     filename = Column(String, nullable=False)
     source_id = Column(String, nullable=False, unique=True, index=True)
+    immich_id = Column(String, nullable=True, unique=True, index=True)
 
     # Relationships
     album = relationship("Album", back_populates="photos")

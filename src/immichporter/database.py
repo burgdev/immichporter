@@ -65,6 +65,15 @@ def init_database(reset_db: bool = False) -> None:
                     "[yellow]Applied migration: Added immich_user_id column to users table[/yellow]"
                 )
 
+    if "photos" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("photos")]
+        if "immich_id" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE photos ADD COLUMN immich_id STRING"))
+                console.print(
+                    "[yellow]Applied migration: Added immich_id column to photos table[/yellow]"
+                )
+
     logger.debug("Database initialized and migrated successfully")
 
 
