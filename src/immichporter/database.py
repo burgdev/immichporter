@@ -233,6 +233,18 @@ def is_album_fully_processed(session: Session, album_id: int) -> bool:
     return False
 
 
+def get_photos_without_immich_id(session: Session) -> list[Photo]:
+    """Get all photos that don't have an immich_id set.
+
+    Args:
+        session: Database session
+
+    Returns:
+        List of Photo objects without immich_id
+    """
+    return session.query(Photo).filter(Photo.immich_id.is_(None)).all()
+
+
 def get_albums_from_db(
     session: Session,
     limit: int | None = None,
