@@ -15,9 +15,14 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
+from immichporter.utils import generate_password
 from datetime import datetime
 from immichporter.immich.immich import ImmichClient, immich_api_client
-from immichporter.database import get_db_session, get_photos_without_immich_id
+from immichporter.database import (
+    get_db_session,
+    get_photos_without_immich_id,
+    get_users,
+)
 from immichporter.models import Photo
 
 
@@ -137,11 +142,8 @@ def update_photos(immich: ImmichClient, dry_run: bool, **options):
     """Update photos with their Immich IDs by searching for them in Immich."""
     logger.info("Starting photo update process")
 
-    # Get database session
-    db = get_db_session()
-
-    # Get photos without immich_id
-    photos = get_photos_without_immich_id(db)
+    session = get_db_session()
+    photos = get_photos_without_immich_id(session)
 
     if not photos:
         logger.info("All photos already have immich_ids")
@@ -247,7 +249,7 @@ def update_photos(immich: ImmichClient, dry_run: bool, **options):
 
                     # Get the photo object from the database to ensure it's fresh
                     try:
-                        photo = db.get(Photo, photo_id)
+                        photo = session.get(Photo, photo_id)
                         if not photo:
                             logger.warning(
                                 f"Photo with ID {photo_id} not found in database"
@@ -289,11 +291,11 @@ def update_photos(immich: ImmichClient, dry_run: bool, **options):
                 if not dry_run:
                     try:
                         # Update all photos in the batch at once
-                        db.bulk_update_mappings(Photo, batch_updates)
-                        db.commit()
+                        session.bulk_update_mappings(Photo, batch_updates)
+                        session.commit()
                         logger.debug(f"Updated {len(batch_updates)} photos in batch")
                     except Exception as e:
-                        db.rollback()
+                        session.rollback()
                         logger.error(f"Error updating batch: {str(e)}")
                 else:
                     logger.debug(
@@ -312,3 +314,63 @@ def update_photos(immich: ImmichClient, dry_run: bool, **options):
         logger.success(f"Successfully updated {updated_count} photos in Immich")
     else:
         logger.info(f"Dry run complete. Would update {updated_count} photos")
+
+
+@cli_immich.command()
+@immich_options
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Run without making any changes",
+    default=False,
+)
+@logging_options
+def update_users(immich: ImmichClient, dry_run: bool, **options):
+    """Update photos with their Immich IDs by searching for them in Immich."""
+    logger.info("Starting users update process")
+    session = get_db_session()
+    db_users = get_users(session)
+    immich_users = immich.get_users()
+    for db_user in db_users:
+        if not db_user.add_to_immich:
+            continue
+        immich_name = db_user.immich_name
+        immich_email = db_user.immich_email
+        mail_fmt = f"{immich_email}"
+        console.print(f"{immich_name:<20} [blue]{mail_fmt:<30}[/]", end="")
+        set_immich_id = db_user.immich_user_id
+        immich_id = set_immich_id
+        if not immich_id:  # check for email
+            for immich_user in immich_users:
+                if immich_user.email == immich_email:
+                    immich_id = immich_user.id
+                    break
+        if not immich_id:  # check for name
+            for immich_user in immich_users:
+                if immich_user.name == immich_name:
+                    immich_id = immich_user.id
+                    break
+        if set_immich_id is None and immich_id:  # add to DB
+            if not dry_run:
+                console.print(f"add id: {immich_id}")
+                db_user.immich_user_id = immich_id
+                session.add(db_user)
+                session.commit()
+            else:
+                console.print(f"[yellow][DRY RUN][/] add id: {immich_id}")
+        elif set_immich_id is not None:
+            console.print(f"[green]id already set: {immich_id}[/]")
+        else:
+            # create new user
+            password = generate_password()
+            if not dry_run:
+                immich.add_user(
+                    name=immich_name, email=immich_email, password=password, quota_gb=15
+                )
+                console.print("[red]add user to immich")
+                db_user.immich_initial_password = password
+                session.add(db_user)
+                session.commit()
+            else:
+                console.print("[yellow][DRY RUN][/] add user to immich")
+        # console.print(f"{immich_name} <[blue]{immich_email}[/]> ({immich_id if immich_id else '[red]not set[/]'})")

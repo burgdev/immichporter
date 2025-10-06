@@ -64,6 +64,11 @@ def init_database(reset_db: bool = False) -> None:
                 console.print(
                     "[yellow]Applied migration: Added immich_user_id column to users table[/yellow]"
                 )
+        if "immich_initial_password" not in columns:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("ALTER TABLE users ADD COLUMN immich_initial_password STRING")
+                )
 
     if "photos" in inspector.get_table_names():
         columns = [col["name"] for col in inspector.get_columns("photos")]
@@ -243,6 +248,15 @@ def get_photos_without_immich_id(session: Session) -> list[Photo]:
         List of Photo objects without immich_id
     """
     return session.query(Photo).filter(Photo.immich_id.is_(None)).all()
+
+
+def get_users(session: Session) -> list[User]:
+    """Get all users from database.
+
+    Returns:
+        List of User objects
+    """
+    return session.query(User).all()
 
 
 def get_albums_from_db(

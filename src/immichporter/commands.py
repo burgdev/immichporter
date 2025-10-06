@@ -30,20 +30,6 @@ def database_options(func):
     return func
 
 
-# def logging_options(func):
-#    """Logging options. Use variable `log_level` in your function."""
-#    func = click.option(
-#        "-l",
-#        "--log-level",
-#        envvar="LOG_LEVEL",
-#        show_envvar=True,
-#        type=click.Choice(["debug", "info", "warning", "error"]),
-#        default="warning",
-#        help="Set the logging level",
-#    )(func)
-#    return func
-
-
 def logging_options(f):
     """Common options for Immich commands."""
 

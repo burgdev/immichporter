@@ -2,10 +2,16 @@ from immichporter.immich.client import AuthenticatedClient
 from typing import Type
 from immichporter.immich.client.api.albums import get_all_albums
 from immichporter.immich.client.api.search import search_assets
+from immichporter.immich.client.api.users_admin import (
+    search_users_admin,
+    create_user_admin,
+)
 from immichporter.immich.client.models import (
     AlbumResponseDto,
     MetadataSearchDto,
     SearchResponseDto,
+    UserResponseDto,
+    UserAdminCreateDto,
 )
 from immichporter.immich.client.types import UNSET, Unset
 from rich.console import Console
@@ -42,6 +48,7 @@ class ImmichClient:
         insecure: bool = False,
     ):
         """Immich client with specific functions, often an API wrapper."""
+        self._api_key = api_key
         self._client = (
             client
             if client is not None
@@ -143,6 +150,31 @@ class ImmichClient:
 
         return assets.assets.items
 
+    def get_users(self, width_deleted: bool = True) -> list[UserResponseDto]:
+        response = search_users_admin.sync_detailed(client=self.client)
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch users: {response.content}")
+        return response.parsed
+
+    def add_user(
+        self, name: str, email: str, password: str, quota_gb: int = 10
+    ) -> UserResponseDto:
+        quota_bytes = 1073741824 * quota_gb
+        body = UserAdminCreateDto(
+            name=name,
+            email=email,
+            password=password,
+            notify=False,
+            should_change_password=True,
+            quota_size_in_bytes=quota_bytes,
+        )
+        response = create_user_admin.sync_detailed(client=self.client, body=body)
+        if response.status_code != 201:
+            raise Exception(
+                f"Failed to create user {response.status_code}: {response.content}"
+            )
+        return response.parsed
+
 
 if __name__ == "__main__":
     import os
@@ -151,7 +183,11 @@ if __name__ == "__main__":
     api_key = os.getenv("IMMICH_API_KEY")
     insecure = os.getenv("IMMICH_INSECURE") == "1"
     client = ImmichClient(endpoint=endpoint, api_key=api_key, insecure=insecure)
-    albums = client.search_assets(
-        filename="20250830_114716.jpg", taken="2025-08-30 09:50:00"
-    )
-    console.print(albums)
+    console.print(f"Endpoint: {client.endpoint}")
+    console.print(f"API Key: [yellow]'{client._api_key}'[/]")
+    # albums = client.search_assets(
+    #    filename="20250830_114716.jpg", taken="2025-08-30 09:50:00"
+    # )
+    # console.print(albums)
+    users = client.get_users()
+    console.print(users)
