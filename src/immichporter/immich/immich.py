@@ -1,17 +1,23 @@
 from immichporter.immich.client import AuthenticatedClient
 from typing import Type
-from immichporter.immich.client.api.albums import get_all_albums
+from immichporter.immich.client.api.albums import (
+    get_all_albums,
+    create_album,
+    delete_album,
+)
 from immichporter.immich.client.api.search import search_assets
 from immichporter.immich.client.api.users_admin import (
     search_users_admin,
     create_user_admin,
 )
 from immichporter.immich.client.models import (
-    AlbumResponseDto,
     MetadataSearchDto,
     SearchResponseDto,
     UserResponseDto,
     UserAdminCreateDto,
+    AlbumUserCreateDto,
+    CreateAlbumDto,
+    AlbumResponseDto,
 )
 from immichporter.immich.client.types import UNSET, Unset
 from rich.console import Console
@@ -67,7 +73,7 @@ class ImmichClient:
         return self.client._base_url
 
     def get_albums(
-        self, limit: int = 50, shared: bool | None = None
+        self, limit: int | None = None, shared: bool | None = None
     ) -> list[AlbumResponseDto]:
         """List all albums on the Immich server.
 
@@ -85,10 +91,52 @@ class ImmichClient:
         albums = sorted(albums, key=lambda x: x.album_name.lower())
 
         # Apply limit
-        if limit > 0:
+        if limit is not None and limit > 0:
             albums = albums[:limit]
 
         return albums
+
+    def create_album(
+        self,
+        name: str,
+        description: str | None = None,
+        users: list[AlbumUserCreateDto] | None = None,
+        assets: list[str] | None = None,
+    ) -> AlbumResponseDto:
+        description = UNSET if description is None else description
+        users = UNSET if users is None else users
+        assets = UNSET if assets is None else assets
+        body = CreateAlbumDto(
+            album_name=name,
+            description=description,
+            album_users=users,
+            asset_ids=assets,
+        )
+        response = create_album.sync_detailed(client=self.client, body=body)
+        if response.status_code != 201:
+            raise Exception(
+                f"Failed to create album {response.status_code}: {response.content}"
+            )
+        return response.parsed
+
+    def delete_album(
+        self, album_id: str | None = None, album_name: str | None = None
+    ) -> None:
+        if album_id is None and album_name is None:
+            raise ValueError("Either album_id or album_name must be provided")
+        if album_id is None:
+            albums = self.get_albums()
+            for album in albums:
+                if album.album_name == album_name:
+                    album_id = album.id
+                    break
+        if album_id is None:
+            raise ValueError(f"Album '{album_name}' not found")
+        response = delete_album.sync_detailed(client=self.client, id=album_id)
+        if response.status_code != 204:
+            raise Exception(
+                f"Failed to delete album {response.status_code}: {response.content}"
+            )
 
     def search_assets(
         self,
@@ -186,8 +234,13 @@ if __name__ == "__main__":
     console.print(f"Endpoint: {client.endpoint}")
     console.print(f"API Key: [yellow]'{client._api_key}'[/]")
     # albums = client.search_assets(
-    #    filename="20250830_114716.jpg", taken="2025-08-30 09:50:00"
+    #   filename="20250113_101105.jpg", taken=None
     # )
     # console.print(albums)
-    users = client.get_users()
-    console.print(users)
+    # users = client.get_users()
+    # console.print(users)
+    # album = client.create_album("Test Album")
+    # console.print(album)
+    client.delete_album(album_name="Ralligstöck, 22.8.25")
+    albums = client.get_albums()
+    console.print([a.album_name for a in albums])

@@ -1,7 +1,7 @@
 """Database operations for immichporter."""
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from typing import List, Dict, Any, Optional
 from rich.console import Console
 from loguru import logger
@@ -77,6 +77,16 @@ def init_database(reset_db: bool = False) -> None:
                 conn.execute(text("ALTER TABLE photos ADD COLUMN immich_id STRING"))
                 console.print(
                     "[yellow]Applied migration: Added immich_id column to photos table[/yellow]"
+                )
+
+    # Migration: Add immich_id to albums table
+    if "albums" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("albums")]
+        if "immich_id" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE albums ADD COLUMN immich_id STRING"))
+                console.print(
+                    "[yellow]Applied migration: Added immich_id column to albums table[/yellow]"
                 )
 
     logger.debug("Database initialized and migrated successfully")
@@ -238,16 +248,49 @@ def is_album_fully_processed(session: Session, album_id: int) -> bool:
     return False
 
 
-def get_photos_without_immich_id(session: Session) -> list[Photo]:
-    """Get all photos that don't have an immich_id set.
+def get_albums_without_immich_id(session: Session) -> list[Album]:
+    """Get all albums that don't have an immich_id set.
 
     Args:
         session: Database session
 
     Returns:
-        List of Photo objects without immich_id
+        List[Album]: List of Album objects without immich_id
     """
-    return session.query(Photo).filter(Photo.immich_id.is_(None)).all()
+    return (
+        session.query(Album)
+        .filter(or_(Album.immich_id.is_(None), Album.immich_id == ""))
+        .all()
+    )
+
+
+def get_photos_from_db(
+    session: Session, album_id: int | None = None, has_immich_id: bool | None = None
+) -> list[Photo]:
+    """Get photos from the database with optional filtering.
+
+    Args:
+        session: Database session
+        album_id: Optional album ID to filter photos by
+        has_immich_id: If True, only return photos with immich_id set.
+                       If False, only return photos without immich_id.
+                       If None, return all photos (no filtering by immich_id).
+
+    Returns:
+        List[Photo]: List of Photo objects matching the criteria
+    """
+    query = session.query(Photo)
+
+    if album_id is not None:
+        query = query.filter(Photo.album_id == album_id)
+
+    if has_immich_id is not None:
+        if has_immich_id:
+            query = query.filter(Photo.immich_id.is_not(None))
+        else:
+            query = query.filter(Photo.immich_id.is_(None))
+
+    return query.all()
 
 
 def get_users(session: Session) -> list[User]:

@@ -1,6 +1,7 @@
 """Immich CLI commands."""
 
 import click
+import sys
 import functools
 from loguru import logger
 from immichporter.commands import logging_options
@@ -20,9 +21,12 @@ from datetime import datetime
 from immichporter.immich.immich import ImmichClient, immich_api_client
 from immichporter.database import (
     get_db_session,
-    get_photos_without_immich_id,
+    get_photos_from_db,
+    get_albums_without_immich_id,
     get_users,
 )
+from immichporter.immich.client.models import AlbumUserCreateDto, AlbumUserRole
+from immichporter.immich.client.api.users import get_my_user
 from immichporter.models import Photo
 
 
@@ -142,14 +146,16 @@ def update_photos(immich: ImmichClient, dry_run: bool, **options):
     """Update photos with their Immich IDs by searching for them in Immich."""
     logger.info("Starting photo update process")
 
+    # Get photos without immich_id
     session = get_db_session()
-    photos = get_photos_without_immich_id(session)
+    photos = get_photos_from_db(session, has_immich_id=False)
 
     if not photos:
         logger.info("All photos already have immich_ids")
         return
 
     if dry_run:
+        console.print("[yellow]\n DRY RUN MODE - No changes will be made\n[/yellow]")
         console.print("[yellow]\n🚧 DRY RUN MODE - No changes will be made\n[/yellow]")
 
     logger.info(f"Found {len(photos)} photos without immich_id")
@@ -314,6 +320,137 @@ def update_photos(immich: ImmichClient, dry_run: bool, **options):
         logger.success(f"Successfully updated {updated_count} photos in Immich")
     else:
         logger.info(f"Dry run complete. Would update {updated_count} photos")
+
+
+@cli_immich.command()
+@immich_options
+@click.option("-a", "--all", is_flag=True, help="Delete all albums")
+@click.option(
+    "-n",
+    "--dry-run",
+    is_flag=True,
+    help="Run without making any changes",
+    default=False,
+)
+@logging_options
+def delete_albums(immich: ImmichClient, all: bool, dry_run: bool, **options):
+    """Delete albums from Immich."""
+    logger.info("Starting album deletion process")
+    albums = immich.get_albums()
+    if all:
+        for album in albums:
+            if not dry_run:
+                immich.delete_album(album.id)
+            else:
+                console.print(
+                    f"[yellow]DRY RUN:[/] Would delete album: [blue]{album.album_name}[/]"
+                )
+
+
+@cli_immich.command()
+@immich_options
+@click.option(
+    "--limit", type=int, default=None, help="Limit the number of albums to sync"
+)
+@click.option(
+    "-n",
+    "--dry-run",
+    is_flag=True,
+    help="Run without making any changes",
+    default=False,
+)
+@logging_options
+def sync_albums(immich: ImmichClient, limit: int | None, dry_run: bool, **options):
+    """Sync albums from database to Immich."""
+    logger.info("Starting album sync process")
+
+    session = get_db_session()
+
+    # Get albums that haven't been synced to Immich yet
+    albums = get_albums_without_immich_id(session)
+    if limit:
+        albums = albums[:limit]
+
+    if not albums:
+        logger.info("All albums already synced to Immich")
+        return
+
+    if dry_run:
+        console.print("[yellow]\n🚧 DRY RUN MODE - No changes will be made\n[/yellow]")
+
+    logger.info(f"Found {len(albums)} albums to sync")
+
+    # Configure progress bar
+    progress_columns = [
+        TextColumn("Syncing albums", style="white"),
+        BarColumn(bar_width=None, complete_style="blue", finished_style="green"),
+        TextColumn("[white]{task.percentage:>3.0f}%[/white]", justify="right"),
+        TextColumn("•", style="white"),
+        TextColumn("[white]{task.completed}/{task.total}", justify="right"),
+    ]
+
+    my_user = get_my_user.sync(client=immich.client)
+    if my_user is None:
+        logger.error("Failed to get my user")
+        sys.exit(1)
+
+    with Progress(*progress_columns, console=console) as progress:
+        task = progress.add_task("Syncing albums...", total=len(albums))
+
+        for album in albums:
+            try:
+                # Get album users with immich_id
+                album_users = [
+                    AlbumUserCreateDto(
+                        user_id=user.immich_user_id, role=AlbumUserRole.VIEWER
+                    )
+                    for user in album.users
+                    if user.immich_user_id is not None
+                    and user.immich_user_id != my_user.id
+                ]
+                album_user_names = [
+                    user.immich_name for user in album.users if user.immich_name
+                ]
+
+                # Get album photos with immich_id
+                photos = get_photos_from_db(
+                    session, album_id=album.id, has_immich_id=True
+                )
+                photo_ids = [photo.immich_id for photo in photos]
+                album_name = (
+                    album.immich_title if album.immich_title else album.source_title
+                )
+
+                if dry_run:
+                    progress.console.print("[yellow][DRY RUN][/]")
+                progress.console.print(
+                    f"Create album: [blue]{album_name}[/] with [blue]{len(photo_ids)}[/] photos"
+                )
+                if album_user_names:
+                    progress.console.print(f"[dim]{', '.join(album_user_names)}[/]")
+                if not dry_run:
+                    # Create album in Immich
+                    immich_album = immich.create_album(
+                        name=album_name,
+                        description=None,
+                        users=album_users,
+                        assets=photo_ids,
+                    )
+
+                    # Update album with immich_id
+                    album.immich_id = immich_album.id
+                    session.add(album)
+                    session.commit()
+                else:
+                    time.sleep(0.1)
+
+            except Exception as e:
+                logger.error(f"Error syncing album {album.source_title}: {str(e)}")
+                session.rollback()
+            finally:
+                progress.update(task, advance=1)
+
+    logger.info("Album sync complete")
 
 
 @cli_immich.command()

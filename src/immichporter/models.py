@@ -32,6 +32,7 @@ class Album(Base):
     source_title = Column(String, unique=False, nullable=False)
     source_type = Column(String, nullable=False)  # 'gphoto', 'local', etc.
     immich_title = Column(String, unique=False, nullable=True)
+    immich_id = Column(String, nullable=True, unique=True, index=True)
     items = Column(Integer)
     processed_items = Column(Integer, default=0)
     shared = Column(Boolean, default=False)

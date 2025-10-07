@@ -25,6 +25,9 @@ dependencies = [
   "loguru",
   "platformdirs>=4.4.0",
   "prompt-toolkit>=3.0.52",
+  "attrs>=25.3.0",
+  "httpx>=0.28.1",
+  "pydantic>=2.11.10",
 ]
 
 [project.scripts]
