@@ -132,7 +132,7 @@ class GooglePhotosScraper:
             console.print(f"[red]Navigation error: {e}[/red]")
             raise
 
-    async def login(self):
+    async def login(self) -> bool:
         """Handle Google Photos login flow.
 
         Returns:
@@ -439,10 +439,10 @@ class GooglePhotosScraper:
                         progress.update(
                             task,
                             advance=0,
-                            description=f"[green]{processed_photos}/{album.items} - {picture_info.filename}[/green] [red](taking a bit longer {'.'*duplicate_count})[/red]",
+                            description=f"[green]{processed_photos}/{album.items} - {picture_info.filename}[/green] [red](taking a bit longer {'.' * duplicate_count})[/red]",
                         )
-                        if duplicate_count >= DUPLICATE_NEXT_IMAGE_THRESHOLD:
-                            logger.warn(
+                        if duplicate_count == DUPLICATE_NEXT_IMAGE_THRESHOLD:
+                            logger.warning(
                                 "Probably missed an 'arrowright' key press, try one more ..."
                             )
                             await self.keyboard_press(

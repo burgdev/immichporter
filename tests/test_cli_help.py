@@ -21,15 +21,16 @@ COMMANDS = [
     ("db_show_stats", ["db", "show-stats", "--help"]),
     ("db_init", ["db", "init", "--help"]),
     ("immich", ["immich", "--help"]),
-    ("immich_create_album", ["immich", "create-album", "--help"]),
-    ("immich_import_photos", ["immich", "import-photos", "--help"]),
+    ("immich_list-albums", ["immich", "list-albums", "--help"]),
 ]
 
 
 @pytest.mark.parametrize("name,cmd_args", COMMANDS)
-def test_cli_help(name, cmd_args):
+def test_cli_help(name, cmd_args, monkeypatch):
     """Test that all commands can be called with --help."""
+
     runner = CliRunner()
+
     # Only add --help if it's not already in the command
     if "--help" not in " ".join(cmd_args) and "--version" not in " ".join(cmd_args):
         cmd_args = cmd_args + ["--help"]
@@ -45,4 +46,4 @@ def test_cli_help(name, cmd_args):
 
     assert (
         result.exit_code == 0
-    ), f"Command failed: {name} - {' '.join(cmd_args)}\n{result.output}"
+    ), f"Command failed with exit code {result.exit_code}: {name} - {' '.join(cmd_args)}\n{result.output}"

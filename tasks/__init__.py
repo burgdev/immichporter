@@ -21,6 +21,7 @@ ns = Collection(
     project.release,
     project.version,
     project.update_venv,
+    project.update_immich_client,
     docs,
     tests,
     check,

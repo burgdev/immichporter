@@ -2,6 +2,7 @@
 
 import click
 import math
+import json
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
@@ -17,8 +18,11 @@ from immichporter.database import (
     get_database_stats,
     init_database,
 )
-from immichporter.utils import sanitize_for_email
-from immichporter.commands import logging_options, configure_logging
+from immichporter.utils import sanitize_for_email, format_csv_value
+from immichporter.commands import logging_options
+
+
+cli_db = click.Group("db", help="Database commands")
 
 
 def prompt_with_default(text: str, default: str = None) -> str:
@@ -70,15 +74,14 @@ def prompt_with_default(text: str, default: str = None) -> str:
 console = Console()
 
 
-@click.command()
+@cli_db.command()
 @logging_options
 def init(log_level: str):
     """Initialize the database."""
-    configure_logging(log_level)
     init_database()
 
 
-@click.command()
+@cli_db.command()
 @logging_options
 @click.option(
     "-n",
@@ -88,7 +91,6 @@ def init(log_level: str):
 )
 def show_albums(not_finished, log_level: str):
     """Show albums in the database."""
-    configure_logging(log_level)
     with get_db_session() as session:
         albums = get_albums_from_db(session, not_finished=not_finished)
 
@@ -138,11 +140,24 @@ def show_albums(not_finished, log_level: str):
         console.print(table)
 
 
-@click.command()
+@cli_db.command()
+@click.option(
+    "-i",
+    "--immich",
+    is_flag=True,
+    help="Show only users which are set to be added to immich",
+)
+@click.option("-p", "--show-password", is_flag=True, help="Show inital password")
+@click.option(
+    "-f",
+    "--format",
+    type=click.Choice(["table", "csv", "json"]),
+    default="table",
+    help="Output format",
+)
 @logging_options
-def show_users(log_level: str):
+def show_users(immich: bool, show_password: bool, format: str, log_level: str):
     """Show all users in the database."""
-    configure_logging(log_level)
     with get_db_session() as session:
         users = get_users_from_db(session)
 
@@ -150,29 +165,68 @@ def show_users(log_level: str):
             console.print("[yellow]No users found in the database.[/yellow]")
             return
 
-        table = Table(title="Users in Database")
-        table.add_column("ID", style="cyan")
-        table.add_column("Source Name", style="magenta")
-        table.add_column("Immich Name", style="green")
-        table.add_column("Email", style="yellow")
-        table.add_column("Immich ID", style="cyan")
-        table.add_column("Add to Immich", style="green")
-        table.add_column("Created At", style="dim")
+        if format == "table":
+            table = Table(title="Users in Database")
+            table.add_column("ID", style="cyan")
+            table.add_column("Source Name", style="magenta")
+            table.add_column("Immich Name", style="green")
+            table.add_column("Email", style="yellow")
+            table.add_column("Immich ID", style="cyan")
+            table.add_column("Immich", style="green")
+            if show_password:
+                table.add_column("Initial Password", style="dim green")
+            table.add_column("Created At", style="dim")
+        else:
+            table = []
+            header = [
+                "id",
+                "source_name",
+                "immich_name",
+                "email",
+                "immich_id",
+                "immich",
+            ]
+            if show_password:
+                header.append("initial_password")
+            header.append("created_at")
+
+        true_sign = "✓" if format == "table" else True
+        false_sign = "✗" if format == "table" else False
+        none_sign = "✗" if format == "table" else None
 
         for user in users:
-            table.add_row(
+            if immich:
+                if not user.add_to_immich:
+                    continue
+            row = [
                 str(user.id),
                 f"[strike]{user.source_name}[/]"
                 if not user.add_to_immich
                 else user.source_name,
-                user.immich_name or "✗",
-                user.immich_email or "✗",
-                str(user.immich_user_id) if user.immich_user_id is not None else "✗",
-                "✓" if user.add_to_immich else "✗",
-                str(user.created_at)[:19] if user.created_at else "N/A",
-            )
+                user.immich_name or none_sign,
+                user.immich_email or none_sign,
+                str(user.immich_user_id)
+                if user.immich_user_id is not None
+                else none_sign,
+                true_sign if user.add_to_immich else false_sign,
+            ]
+            if show_password:
+                row.append(user.immich_initial_password or none_sign)
+            row.append(str(user.created_at)[:19] if user.created_at else "N/A")
+            if format == "table":
+                table.add_row(*row)
+            else:
+                table.append(row)
 
-        console.print(table)
+        if format == "table":
+            console.print(table)
+        elif format == "csv":
+            console.print(",".join(header))
+            for row in table:
+                click.echo(",".join(map(format_csv_value, row)))
+        elif format == "json":
+            table_json = [dict(zip(header, row)) for row in table]
+            click.echo(json.dumps(table_json, indent=2))
 
 
 def update_user_immich_name(session: Session, user_id: int, immich_name: str) -> None:
@@ -201,7 +255,7 @@ def update_user_add_to_immich(
         session.commit()
 
 
-@click.command()
+@cli_db.command()
 @click.option(
     "-d",
     "--domain",
@@ -231,7 +285,6 @@ def edit_users(
     By default, only shows users added to Immich without an email.
     Use --all to show all users, or --user-id to edit a specific user.
     """
-    configure_logging(log_level)
     with get_db_session() as session:
         if user_id is not None:
             # Edit specific user by ID
@@ -339,11 +392,10 @@ def edit_users(
         # show_users.callback()
 
 
-@click.command()
+@cli_db.command()
 @logging_options
 def show_stats(log_level: str):
     """Show database statistics."""
-    configure_logging(log_level)
     with get_db_session() as session:
         stats = get_database_stats(session)
 
@@ -461,12 +513,9 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
             console.print(f"[red]Unexpected error: {str(e)}")
 
 
-@click.command("drop")
+@cli_db.command("drop")
 @click.option(
-    "-n",
-    "--name",
-    type=click.Choice(["albums", "photos", "users", "errors"], case_sensitive=False),
-    help="Name of the table to drop (albums, photos, users, errors)",
+    "-n", "--name", help="Name of the table to drop (albums, photos, users, errors)"
 )
 @click.option(
     "-a",
@@ -480,5 +529,4 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
 @click.pass_context
 def drop_command(ctx, name: str, all_tables: bool, force: bool, log_level: str):
     """Drop database tables or the entire database."""
-    configure_logging(log_level)
     drop_table(name, all_tables, force)

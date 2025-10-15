@@ -25,9 +25,9 @@ def header(
     max_ = max_length - min_ - 2
     length = len(msg)
     start = f"[dim]{symb * (max_ - length) if length < max_ else symb * min_}[/]"
-    end = f"[dim]{symb*min_}[/]"
+    end = f"[dim]{symb * min_}[/]"
     if not msg:
-        echo(f"[dim]{symb*max_length}[/]", file=sys.stderr if stderr else None)
+        echo(f"[dim]{symb * max_length}[/]", file=sys.stderr if stderr else None)
     else:
         echo(f"{start} [{style}]{msg} {end}", file=sys.stderr if stderr else None)
 

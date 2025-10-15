@@ -1,42 +1,56 @@
-"""Immich specific models and dataclasses."""
+"""Pydantic models for Immich API responses."""
 
-from dataclasses import dataclass
-from typing import Optional
+from datetime import datetime
+from enum import Enum
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field
 
 
-@dataclass
-class ImmichAlbum:
-    """Information about an Immich album."""
+class AssetType(str, Enum):
+    IMAGE = "IMAGE"
+    VIDEO = "VIDEO"
+    AUDIO = "AUDIO"
+    OTHER = "OTHER"
+
+
+class AssetResponse(BaseModel):
+    """Represents an asset (photo/video) in Immich."""
 
     id: str
-    name: str
-    asset_count: int
+    device_asset_id: str = Field(..., alias="deviceAssetId")
+    owner_id: str = Field(..., alias="ownerId")
+    device_id: str = Field(..., alias="deviceId")
+    type: AssetType
+    original_path: str = Field(..., alias="originalPath")
+    original_file_name: str = Field(..., alias="originalFileName")
+    file_created_at: datetime = Field(..., alias="fileCreatedAt")
+    file_modified_at: datetime = Field(..., alias="fileModifiedAt")
+    updated_at: datetime = Field(..., alias="updatedAt")
+    is_favorite: bool = Field(..., alias="isFavorite")
+    is_archived: bool = Field(..., alias="isArchived")
+    duration: Optional[str] = None
+    exif_info: Optional[Dict[str, Any]] = Field(None, alias="exifInfo")
+
+
+class AlbumResponse(BaseModel):
+    """Represents an album in Immich."""
+
+    id: str
+    album_name: str = Field(..., alias="albumName")
     description: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    album_thumbnail_asset_id: Optional[str] = Field(None, alias="albumThumbnailAssetId")
+    shared: bool
+    asset_count: int = Field(..., alias="assetCount")
+    assets: List[AssetResponse] = []
+    created_at: datetime = Field(..., alias="createdAt")
+    updated_at: datetime = Field(..., alias="updatedAt")
+    album_thumbnail_asset: Optional[AssetResponse] = Field(
+        None, alias="albumThumbnailAsset"
+    )
 
 
-@dataclass
-class ImmichAsset:
-    """Information about an Immich asset."""
+class AlbumListResponse(BaseModel):
+    """Response model for listing albums."""
 
-    id: str
-    original_filename: str
-    device_asset_id: str
-    device_id: str
-    type: str  # 'IMAGE', 'VIDEO', etc.
-    file_size: int
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-
-
-@dataclass
-class ImmichUser:
-    """Information about an Immich user."""
-
-    id: str
-    name: str
-    email: str
-    avatar_color: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    albums: List[AlbumResponse]
+    count: int

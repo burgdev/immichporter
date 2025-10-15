@@ -32,6 +32,7 @@ class Album(Base):
     source_title = Column(String, unique=False, nullable=False)
     source_type = Column(String, nullable=False)  # 'gphoto', 'local', etc.
     immich_title = Column(String, unique=False, nullable=True)
+    immich_id = Column(String, nullable=True, unique=True, index=True)
     items = Column(Integer)
     processed_items = Column(Integer, default=0)
     shared = Column(Boolean, default=False)
@@ -59,6 +60,7 @@ class User(Base):
     immich_name = Column(String, unique=False, nullable=True)
     immich_email = Column(String, nullable=True)
     immich_user_id = Column(Integer, nullable=True)
+    immich_initial_password = Column(String, nullable=True)
     add_to_immich = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=func.now())
     albums = relationship("Album", secondary="album_users", back_populates="users")
@@ -81,6 +83,7 @@ class Photo(Base):
     created_at = Column(DateTime, default=func.now())
     filename = Column(String, nullable=False)
     source_id = Column(String, nullable=False, unique=True, index=True)
+    immich_id = Column(String, nullable=True, unique=True, index=True)
 
     # Relationships
     album = relationship("Album", back_populates="photos")
