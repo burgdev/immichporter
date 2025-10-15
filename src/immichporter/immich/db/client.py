@@ -60,7 +60,39 @@ class ImmichDBClient:
         with self.session_scope() as session:
             result = (
                 session.query(Asset)
-                .filter(Asset.id.in_(asset_ids))
+                .filter(
+                    Asset.id.in_(asset_ids),
+                    Asset.owner_id
+                    != new_owner_uuid,  # Only update if owner is different
+                )
                 .update({"ownerId": new_owner_uuid}, synchronize_session="fetch")
             )
             return result
+
+    def count_assets_needing_owner_update(
+        self, asset_ids: List[str], new_owner_id: str
+    ) -> int:
+        """Count how many assets need to be updated with the new owner.
+
+        Args:
+            asset_ids: List of asset IDs to check
+            new_owner_id: The new owner's UUID to check against
+
+        Returns:
+            int: Number of assets that would be updated
+        """
+        if not asset_ids:
+            return 0
+
+        try:
+            new_owner_uuid = UUID(new_owner_id)
+        except (ValueError, AttributeError):
+            raise ValueError("Invalid owner_id format. Must be a valid UUID.")
+
+        with self.session_scope() as session:
+            count = (
+                session.query(Asset)
+                .filter(Asset.id.in_(asset_ids), Asset.owner_id != new_owner_uuid)
+                .count()
+            )
+            return count

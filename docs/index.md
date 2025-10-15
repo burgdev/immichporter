@@ -2,7 +2,7 @@
 ![Immichporter logo](assets/logo.png){ width=120, align=right }
 
 !!! warning
-    Still in a early stage. At the moment only exporting from google photos is supported.
+    **Still experimental:** Google Photos export works in some cases, but stability issues remain.
 
 # Getting Started
 

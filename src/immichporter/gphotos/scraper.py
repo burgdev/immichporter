@@ -132,7 +132,7 @@ class GooglePhotosScraper:
             console.print(f"[red]Navigation error: {e}[/red]")
             raise
 
-    async def login(self):
+    async def login(self) -> bool:
         """Handle Google Photos login flow.
 
         Returns:

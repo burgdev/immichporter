@@ -148,7 +148,7 @@ def list_albums(immich: ImmichClient, limit, shared, **options):
 )
 @logging_options
 def update_photos(immich: ImmichClient, dry_run: bool, **options):
-    """Update photos with their Immich IDs by searching for them in Immich."""
+    """Update our photos with their Immich IDs by searching for them in Immich."""
     logger.info("Starting photo update process")
 
     # Get photos without immich_id
@@ -366,7 +366,7 @@ def delete_albums(immich: ImmichClient, all: bool, dry_run: bool, **options):
 )
 @logging_options
 def sync_albums(immich: ImmichClient, limit: int | None, dry_run: bool, **options):
-    """Sync albums from database to Immich."""
+    """Sync albums from our database to Immich."""
     logger.info("Starting album sync process")
 
     session = get_db_session()
@@ -468,7 +468,7 @@ def sync_albums(immich: ImmichClient, limit: int | None, dry_run: bool, **option
 )
 @logging_options
 def update_users(immich: ImmichClient, dry_run: bool, **options):
-    """Update photos with their Immich IDs by searching for them in Immich."""
+    """Update our users with their Immich IDs by searching for them in Immich."""
     logger.info("Starting users update process")
     session = get_db_session()
     db_users = get_users(session)
@@ -634,7 +634,7 @@ def adjust_owners_command(
         db_session = get_sqlite_session()
 
         # Get all users with add_to_immich=True
-        users = db_session.query(User).filter(User.add_to_immich is True).all()
+        users = db_session.query(User).filter(User.add_to_immich == True).all()  # noqa: E712
         if not users:
             console.print("[yellow]No users found with add_to_immich=True[/]")
             return
@@ -664,7 +664,7 @@ def adjust_owners_command(
                 continue
 
             console.print(
-                f"\nProcessing user [blue]#{user.id}[/]: [yellow]{user.source_name} <{user.email}>[/][dim with {len(immich_ids)} assets]"
+                f"\nProcessing user [blue]#{user.id}[/]: [yellow]{user.source_name} <{user.immich_email}>[/][dim with {len(immich_ids)} assets]"
             )
             console.print(f"Immich User ID: {user.immich_user_id}")
 
@@ -674,8 +674,18 @@ def adjust_owners_command(
                 )
                 continue
 
-            # Calculate total batches
-            total_batches = (len(immich_ids) + batch_size - 1) // batch_size
+            # Count how many assets actually need updating
+            total_to_update = immich_client.count_assets_needing_owner_update(
+                asset_ids=immich_ids, new_owner_id=str(user.immich_user_id)
+            )
+
+            if total_to_update == 0:
+                console.print("[green]✓ All assets already have the correct owner[/]")
+                continue
+
+            console.print(
+                f"[yellow]Found [blue]{total_to_update}[/] assets to update...[/]"
+            )
 
             with Progress(
                 SpinnerColumn(),
@@ -683,12 +693,12 @@ def adjust_owners_command(
                 BarColumn(bar_width=30),
                 "[progress.percentage]{task.percentage:>3.0f}%",
                 "•",
-                "[cyan]Batch {task.completed}/{task.total}",
+                "[cyan]{task.completed}/{task.total} assets",
                 console=console,
             ) as progress:
                 task = progress.add_task(
-                    f"[cyan]Updating database for [/][yellow]{user.immich_user_id}[/]",
-                    total=total_batches,
+                    f"[cyan]Updating assets for user {user.immich_user_id}[/]",
+                    total=total_to_update,
                 )
 
                 # Process batches
@@ -698,12 +708,15 @@ def adjust_owners_command(
                         updated = immich_client.update_asset_owner(
                             asset_ids=batch, new_owner_id=str(user.immich_user_id)
                         )
-                        progress.update(
-                            task,
-                            advance=1,
-                            description=f"[cyan]Updating database for [/][yellow]{user.immich_user_id}[/]",
-                        )
-                        time.sleep(0.1)  # Small delay to allow progress to update
+                        if (
+                            updated > 0
+                        ):  # Only update progress if something was actually updated
+                            progress.update(
+                                task,
+                                advance=updated,
+                                description=f"[cyan]Updating assets for user {user.immich_user_id}[/]",
+                            )
+                            time.sleep(0.1)  # Small delay to allow progress to update
                     except Exception as e:
                         progress.console.print(
                             f"[red]Error updating batch {i // batch_size + 1}: {e}[/]"

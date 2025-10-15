@@ -14,7 +14,7 @@
 
 
 > [!WARNING]
-> Still in a early stage. At the moment only exporting from google photos is supported.
+> **Still experimental:** Google Photos export works in some cases, but stability issues remain.
 
 
 **Immichporter** exports google photos information into a database which can be used to import the information back into immich.
@@ -67,6 +67,20 @@ immichporter db edit-users # select which users should be added to immich
 
 # see the database with https://sqlitebrowser.org
 sqlitebrowser immichporter.db
+
+# this steps are needed to get the immich ids into the 'immichporter.db' sqlite database
+immichporter immich update-users
+immichporter immich update-albums
+
+# delete ablums (optional) if you want to start over
+immichporter immich delete-albums
+
+# sync albums to immich (create albums and users, add assets to albums)
+export IMMICH_ENDPOINT=http://localhost:2283
+export IMMICH_API_KEY=your_api_key
+export IMMICH_INSECURE=1
+immichporter sync-albums --dry-run  
+immichporter sync-albums
 ```
 
 ## TODO:

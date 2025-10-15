@@ -157,7 +157,7 @@ class ImmichClient:
         taken: datetime | str | None | Unset = None,
         taken_before: datetime | str | None | Unset = None,
         taken_after: datetime | str | None | Unset = None,
-        **options,
+        **options: any,
     ) -> list[AlbumResponseDto]:
         """Search for assets on the Immich server.
 
