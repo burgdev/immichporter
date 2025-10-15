@@ -22,15 +22,18 @@ COMMANDS = [
     ("db_init", ["db", "init", "--help"]),
     ("immich", ["immich", "--help"]),
     ("immich_list-albums", ["immich", "list-albums", "--help"]),
+    ("immich_delete-albums", ["immich", "delete-albums", "--help"]),
+    ("immich_adjust-owners", ["immich", "adjust-owners", "--help"]),
+    ("immich_sync-albums", ["immich", "sync-albums", "--help"]),
+    ("immich_update-users", ["immich", "update-users", "--help"]),
+    ("immich_update-photos", ["immich", "update-photos", "--help"]),
 ]
 
 
 @pytest.mark.parametrize("name,cmd_args", COMMANDS)
-def test_cli_help(name, cmd_args, monkeypatch):
+def test_cli_help(name, cmd_args):
     """Test that all commands can be called with --help."""
-
     runner = CliRunner()
-
     # Only add --help if it's not already in the command
     if "--help" not in " ".join(cmd_args) and "--version" not in " ".join(cmd_args):
         cmd_args = cmd_args + ["--help"]
