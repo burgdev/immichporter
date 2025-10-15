@@ -5,6 +5,8 @@ from immichporter.immich.client.api.albums import (
     create_album,
     delete_album,
 )
+import time
+import re
 from immichporter.immich.client.api.search import search_assets
 from immichporter.immich.client.api.users_admin import (
     search_users_admin,
@@ -18,6 +20,17 @@ from immichporter.immich.client.models import (
     AlbumUserCreateDto,
     CreateAlbumDto,
     AlbumResponseDto,
+    JobCreateDto,
+    JobCommandDto,
+    ManualJobName,
+    JobName,
+    JobCommand,
+    JobStatusDto,
+)
+from immichporter.immich.client.api.jobs import (
+    create_job,
+    get_all_jobs_status,
+    send_job_command,
 )
 from immichporter.immich.client.types import UNSET, Unset
 from rich.console import Console
@@ -222,6 +235,93 @@ class ImmichClient:
                 f"Failed to create user {response.status_code}: {response.content}"
             )
         return response.parsed
+
+    def start_job(self, job_name: ManualJobName | JobName) -> dict:
+        """Start a new job with the given name.
+
+        Args:
+            job_name: Name of the job to start (must be a valid ManualJobName or JobName value)
+
+        Returns:
+            dict: The job status with keys: id, name, isActive, lastRun, nextRun
+
+        Raises:
+            Exception: If the job fails to start or status cannot be retrieved
+        """
+        try:
+            # Create the job data
+            if isinstance(job_name, ManualJobName):
+                job_data = JobCreateDto(name=ManualJobName(job_name))
+
+                # Send the request to create the job
+                response = create_job.sync_detailed(client=self._client, body=job_data)
+
+                # 204 No Content is expected on success
+                if response.status_code != 204:
+                    raise Exception(
+                        f"Failed to start job {job_name}: {response.content}"
+                    )
+                return True
+            elif isinstance(job_name, JobName):
+                job_data = JobCreateDto(name=JobName(job_name))
+                # Send the request to create the job
+                body = JobCommandDto(command=JobCommand.START)
+                response = send_job_command.sync_detailed(
+                    id=job_name, client=self._client, body=body
+                )
+                if response.status_code == 400:
+                    if (
+                        "job is already running"
+                        in response.content.decode("utf-8").lower()
+                    ):
+                        console.print(
+                            f"Job [blue]'{job_name}'[/] is already running, maybe you need to restart it later manually!"
+                        )
+                        return True
+
+                if not response.status_code.is_success:
+                    raise Exception(
+                        f"Failed to start job {job_name} (status code: {response.status_code}): {response.content}"
+                    )
+                job_status = response.parsed
+                return job_status.job_counts.active >= 0
+
+        except Exception as e:
+            raise Exception(f"Error starting job {job_name}: {str(e)}") from e
+
+    def get_job_status(self, job_name: JobName) -> JobStatusDto:
+        """Get the status of a job by name.
+
+        Args:
+            job_name: Name of the job to check
+
+        Returns:
+            dict: The job status with keys: id, name, isActive, lastRun, nextRun
+
+        Raises:
+            Exception: If the job status cannot be retrieved
+        """
+        try:
+            response = get_all_jobs_status.sync_detailed(client=self._client)
+            if not response.status_code.is_success:
+                raise Exception(
+                    f"Failed to get job status (status code: {response.status_code}): {response.content}"
+                )
+
+            resp_parsed = response.parsed
+            job_name_snake = re.sub(r"([a-z])([A-Z])", r"\1_\2", job_name).lower()
+            job_status = getattr(resp_parsed, job_name_snake, None)
+            if not job_status:
+                raise Exception(f"Could not find status for job {job_name}")
+
+            return job_status
+
+        except Exception as e:
+            raise Exception(f"Error getting job status for {job_name}: {str(e)}")
+
+    def run_db_backup(self, wait_time_s: int = 15):
+        self.start_job(ManualJobName.BACKUP_DATABASE)
+        time.sleep(wait_time_s)
 
 
 if __name__ == "__main__":

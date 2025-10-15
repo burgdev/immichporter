@@ -28,6 +28,7 @@ dependencies = [
   "attrs>=25.3.0",
   "httpx>=0.28.1",
   "pydantic>=2.11.10",
+  "psycopg2-binary>=2.9.11",
 ]
 
 [project.scripts]

@@ -79,6 +79,44 @@ def generate_password() -> str:
     )
 
 
+def is_number(value: str) -> bool:
+    """Check if a string can be converted to a number (int or float)."""
+    try:
+        float(str(value).strip())
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def format_csv_value(value) -> str:
+    """Format a value for CSV output."""
+    if value is None:
+        return '""'
+
+    # Convert to string and strip whitespace for number checking
+    str_value = str(value).strip()
+
+    # Check if it's a number (int or float)
+    if is_number(str_value):
+        # If it's a whole number, convert to int, otherwise keep as float
+        try:
+            if float(str_value).is_integer():
+                return str(int(float(str_value)))
+            return str(float(str_value))
+        except (ValueError, TypeError):
+            pass
+
+    if isinstance(value, bool):
+        return "1" if value else "0"
+
+    if value is None:
+        return ""
+
+    # If we get here, it's not a number or boolean, so treat as string
+    escaped_value = str_value.replace('"', '""')
+    return '"' + escaped_value + '"'
+
+
 if __name__ == "__main__":
     for _ in range(10):
         print(generate_password())

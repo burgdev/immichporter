@@ -1,17 +1,16 @@
 """Immich CLI commands."""
 
+import time
 import click
 import sys
+from rich.progress import Progress, SpinnerColumn, BarColumn
 import functools
 from loguru import logger
 from immichporter.commands import logging_options
 from rich.console import Console
 from rich.table import Table
-import time
 from rich.progress import (
-    Progress,
     TextColumn,
-    BarColumn,
     TimeRemainingColumn,
     TimeElapsedColumn,
 )
@@ -28,6 +27,12 @@ from immichporter.database import (
 from immichporter.immich.client.models import AlbumUserCreateDto, AlbumUserRole
 from immichporter.immich.client.api.users import get_my_user
 from immichporter.models import Photo
+from immichporter.immich.db import ImmichDBClient
+from immichporter.database import get_db_session as get_sqlite_session
+from immichporter.models import User
+from immichporter.immich.client.models import (
+    JobName,
+)
 
 
 def format_time(seconds: float) -> str:
@@ -510,4 +515,249 @@ def update_users(immich: ImmichClient, dry_run: bool, **options):
                 session.commit()
             else:
                 console.print("[yellow][DRY RUN][/] add user to immich")
-        # console.print(f"{immich_name} <[blue]{immich_email}[/]> ({immich_id if immich_id else '[red]not set[/]'})")
+
+
+@cli_immich.command("adjust-owners")
+@immich_options
+@click.option(
+    "--db-host",
+    envvar="DB_HOST",
+    default="database",
+    help="PostgreSQL host. Can also be set via DB_HOST environment variable.",
+    show_envvar=True,
+    show_default=True,
+)
+@click.option(
+    "--db-port",
+    envvar="DB_PORT",
+    default=5432,
+    type=int,
+    help="PostgreSQL port. Can also be set via DB_PORT environment variable.",
+    show_envvar=True,
+    show_default=True,
+)
+@click.option(
+    "--db-username",
+    envvar="DB_USERNAME",
+    default="immich",
+    help="PostgreSQL username. Can also be set via DB_USERNAME environment variable.",
+    show_envvar=True,
+    show_default=True,
+)
+@click.option(
+    "--db-password",
+    envvar="DB_PASSWORD",
+    default="immich",
+    help="PostgreSQL password. Can also be set via DB_PASSWORD environment variable.",
+    show_envvar=True,
+    show_default=False,
+    hide_input=True,
+)
+@click.option(
+    "--db-name",
+    envvar="DB_NAME",
+    default="immich",
+    help="PostgreSQL database name. Can also be set via DB_NAME environment variable.",
+    show_envvar=True,
+    show_default=True,
+)
+@click.option(
+    "--dry-run/--no-dry-run",
+    is_flag=True,
+    default=True,
+    help="Show what would be changed without making any changes",
+    show_default=True,
+)
+@click.option(
+    "--batch-size",
+    default=25,
+    type=int,
+    help="Number of assets to process in a batch",
+    show_default=True,
+)
+@click.option(
+    "--storage-migration/--no-storage-migration",
+    is_flag=True,
+    default=True,
+    help="Run 'storage template migration' job after adjusting owners",
+    show_default=True,
+)
+@click.option(
+    "--db-backup/--no-db-backup",
+    is_flag=True,
+    default=True,
+    help="Run 'storage template migration' job after adjusting owners",
+    show_default=True,
+)
+@logging_options
+def adjust_owners_command(
+    immich: ImmichClient,
+    db_host: str,
+    db_port: int,
+    db_username: str,
+    db_password: str,
+    db_name: str,
+    dry_run: bool,
+    batch_size: int,
+    log_level: str,
+    storage_migration: bool,
+    db_backup: bool,
+    **options,
+):
+    """Adjust asset ownership in Immich based on SQLite database."""
+    log_level = options.get("log_level", "INFO").upper()
+
+    if db_backup:
+        console.print("[yellow]Running database backup...[/]")
+        console.print("[dim]wait 2 minutes...[/]")
+        immich.run_db_backup(180)
+
+    # Construct PostgreSQL URL
+    postgres_url = (
+        f"postgresql://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
+    )
+
+    if log_level == "DEBUG":
+        console.print(
+            f"[yellow]Using PostgreSQL URL: {postgres_url.split('@')[0]}@...[/]"
+        )
+
+    try:
+        # Initialize Immich DB client
+        immich_client = ImmichDBClient(postgres_url, echo=(log_level == "DEBUG"))
+    except Exception as e:
+        console.print(f"[red]Error connecting to Immich database: {e}[/]")
+        return
+
+    try:
+        # Get SQLite session
+        db_session = get_sqlite_session()
+
+        # Get all users with add_to_immich=True
+        users = db_session.query(User).filter(User.add_to_immich is True).all()
+        if not users:
+            console.print("[yellow]No users found with add_to_immich=True[/]")
+            return
+
+        console.print(f"Found {len(users)} users to process")
+
+        for user in users:
+            if not user.immich_user_id:
+                console.print(
+                    f"[yellow]Skipping user {user.source_name}: No immich_user_id[/]"
+                )
+                continue
+
+            # Get all photos for this user
+            photos = db_session.query(Photo).filter(Photo.user_id == user.id).all()
+            if not photos:
+                console.print(f"[yellow]No photos found for user {user.source_name}[/]")
+                continue
+
+            # Extract immich_ids from photos
+            immich_ids = [str(photo.immich_id) for photo in photos if photo.immich_id]
+
+            if not immich_ids:
+                console.print(
+                    f"[yellow]No valid immich_ids found for user {user.source_name}[/]"
+                )
+                continue
+
+            console.print(
+                f"\nProcessing user [blue]#{user.id}[/]: [yellow]{user.source_name} <{user.email}>[/][dim with {len(immich_ids)} assets]"
+            )
+            console.print(f"Immich User ID: {user.immich_user_id}")
+
+            if dry_run:
+                console.print(
+                    "[yellow]Dry run: Would update asset ownership in batches[/]"
+                )
+                continue
+
+            # Calculate total batches
+            total_batches = (len(immich_ids) + batch_size - 1) // batch_size
+
+            with Progress(
+                SpinnerColumn(),
+                "[progress.description]{task.description}",
+                BarColumn(bar_width=30),
+                "[progress.percentage]{task.percentage:>3.0f}%",
+                "•",
+                "[cyan]Batch {task.completed}/{task.total}",
+                console=console,
+            ) as progress:
+                task = progress.add_task(
+                    f"[cyan]Updating database for [/][yellow]{user.immich_user_id}[/]",
+                    total=total_batches,
+                )
+
+                # Process batches
+                for i in range(0, len(immich_ids), batch_size):
+                    batch = immich_ids[i : i + batch_size]
+                    try:
+                        updated = immich_client.update_asset_owner(
+                            asset_ids=batch, new_owner_id=str(user.immich_user_id)
+                        )
+                        progress.update(
+                            task,
+                            advance=1,
+                            description=f"[cyan]Updating database for [/][yellow]{user.immich_user_id}[/]",
+                        )
+                        time.sleep(0.1)  # Small delay to allow progress to update
+                    except Exception as e:
+                        progress.console.print(
+                            f"[red]Error updating batch {i // batch_size + 1}: {e}[/]"
+                        )
+                        continue
+
+    except Exception as e:
+        console.print(f"[red]Error during database operations: {e}[/]")
+        return
+    finally:
+        if "db_session" in locals():
+            db_session.close()
+
+    if storage_migration:
+        console.print(
+            "\nStarting 'storage template migration' job, this can take some time ..."
+        )
+        started = immich.start_job(JobName.STORAGETEMPLATEMIGRATION)
+        if not started:
+            console.print(
+                "[red]Failed to start 'storage template migration' job, please start it manually[/]"
+            )
+            sys.exit(1)
+
+        with Progress(
+            SpinnerColumn(),
+            "[progress.description]{task.description}",
+            "•",
+            "[elapsed]Elapsed: {task.fields[elapsed_time]}",
+            console=console,
+        ) as progress:
+            start_time = time.time()
+            task = progress.add_task(
+                "[cyan]Running storage template migration...", elapsed_time="0:00:00"
+            )
+
+            job_status = immich.get_job_status(JobName.STORAGETEMPLATEMIGRATION)
+            while job_status.job_counts.active > 0:
+                elapsed = time.time() - start_time
+                elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed))
+                progress.update(
+                    task,
+                    description="[cyan]Running storage template migration...",
+                    elapsed_time=elapsed_str,
+                    refresh=True,
+                )
+                time.sleep(1)
+                job_status = immich.get_job_status(JobName.STORAGETEMPLATEMIGRATION)
+
+            progress.update(
+                task,
+                description="[green]Storage template migration complete!",
+                elapsed_time=time.strftime(
+                    "%H:%M:%S", time.gmtime(time.time() - start_time)
+                ),
+                refresh=True,
+            )

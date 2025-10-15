@@ -439,7 +439,7 @@ class GooglePhotosScraper:
                         progress.update(
                             task,
                             advance=0,
-                            description=f"[green]{processed_photos}/{album.items} - {picture_info.filename}[/green] [red](taking a bit longer {'.'*duplicate_count})[/red]",
+                            description=f"[green]{processed_photos}/{album.items} - {picture_info.filename}[/green] [red](taking a bit longer {'.' * duplicate_count})[/red]",
                         )
                         if duplicate_count == DUPLICATE_NEXT_IMAGE_THRESHOLD:
                             logger.warning(
