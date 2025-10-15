@@ -102,6 +102,7 @@ DEP004 = [
   "loguru",
 ] # only in dev
 DEP003 = ["immichporter"] # transitive dependencies
+DEP002 = ["psycopg2-binary"]
 
 
 [build-system]
