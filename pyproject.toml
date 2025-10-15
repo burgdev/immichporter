@@ -81,6 +81,11 @@ test = [
   "pytest-xdist>=3.8.0",
 ]
 
+[tool.pytest.ini_options]
+#addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

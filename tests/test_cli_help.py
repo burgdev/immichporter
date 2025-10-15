@@ -31,11 +31,9 @@ COMMANDS = [
 
 
 @pytest.mark.parametrize("name,cmd_args", COMMANDS)
-def test_cli_help(name, cmd_args, monkeypatch):
+def test_cli_help(name, cmd_args):
     """Test that all commands can be called with --help."""
-
     runner = CliRunner()
-
     # Only add --help if it's not already in the command
     if "--help" not in " ".join(cmd_args) and "--version" not in " ".join(cmd_args):
         cmd_args = cmd_args + ["--help"]
