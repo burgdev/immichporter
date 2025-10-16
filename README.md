@@ -16,19 +16,20 @@
 > [!WARNING]
 > * **Still experimental:** Google Photos export works in some cases, but stability issues remain.
 > * Only works in **English**
+> * Immich import/update not yet tested!
 
 
 **Immichporter** exports google photos *information* into a sqlite database which can be used to import the information back into immich.
 
 > [!IMPORTANT]
-> This tool **does not** download any images from google photos. It only exports the information into a database.
+> * This tool **does not** download any images from google photos. It only exports the information into a database.
+> * Make sure to manulley save all shared pictures in google photos before running a takeout.
 
 <!-- # --8<-- [start:readme_index] <!-- -->
 
 Use [google takeout](https://takeout.google.com) to export your google photos assets and [`immich-go`](https://github.com/simulot/immich-go) to import the data into immich.
 
 > [!IMPORTANT]
-> Make sure to manulley save all shared pictures in google photos before running a takeout.
 
 Use [`immichporter`](https://github.com/burgdev/immichporter) to get all assets and user per album and update/create all albums in immich again.
 It can add all users again to shared albums and you can even move assets to the correct user.
