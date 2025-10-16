@@ -109,6 +109,7 @@ class GooglePhotosScraper:
             ignore_default_args=["--enable-automation"],
             viewport={"width": 1000, "height": 700},
             slow_mo=40,
+            timeout=DEFAULT_TIMEOUT,
         )
 
         logger.debug("Creating page ...")
@@ -130,11 +131,11 @@ class GooglePhotosScraper:
             url += f"/{path}"
         try:
             console.print(f"Navigating to [blue]'{url}'[/blue]")
-            await self.page.goto(url)
-            await self.page.wait_for_load_state("domcontentloaded")
-        except Exception as e:
-            console.print(f"[red]Navigation error: {e}[/red]")
-            raise e
+            await self.page.goto(url, wait_until="domcontentloaded")
+        except PlaywrightTimeoutError as e:
+            raise TimeoutError(
+                f"Navigation timeout, could not navigate to '{url}'"
+            ) from e
 
     async def login(self) -> bool:
         """Handle Google Photos login flow.
@@ -208,7 +209,7 @@ class GooglePhotosScraper:
             try:
                 await c_wiz_locator.wait_for(state="hidden", timeout=4000)
                 hidden_c_wiz = c_wiz_locator.first
-            except Exception as e:
+            except PlaywrightTimeoutError as e:
                 logger.debug(f"c-wiz locator not found: {e}")
                 if cnt % 4 == 0 and cnt > 0:
                     logger.debug("Page reload")
@@ -245,11 +246,22 @@ class GooglePhotosScraper:
         source_id = await self.get_source_id()
         loc = loc or self.page.locator(f'c-wiz[jslog*="{source_id}"]')
         try:
-            await loc.wait_for(state="attached", timeout=1000)
+            await loc.first.wait_for(state="attached", timeout=1000)
         except PlaywrightTimeoutError:
-            await self.page.reload(wait_until="domcontentloaded")
-            await loc.wait_for(state="attached", timeout=5000)
-        return source_id, loc
+            try:  # try page reload
+                await self.page.reload(wait_until="domcontentloaded")
+                source_id2 = await self.get_source_id()
+                if source_id != source_id2:
+                    logger.warning(
+                        f"Source ID changed from {source_id} to {source_id2}"
+                    )
+                loc = self.page.locator(f'c-wiz[jslog*="{source_id2}"]')
+                await loc.first.wait_for(state="attached", timeout=5000)
+            except PlaywrightTimeoutError:
+                # check if info box is okay
+                await self.set_info_box_parent_element()
+                await loc.first.wait_for(state="attached", timeout=5000)
+        return source_id, loc.first
 
     async def get_photo_info(
         self, album: AlbumInfo, el: Locator | None = None
@@ -274,16 +286,18 @@ class GooglePhotosScraper:
             await time_element.wait_for(state="attached", timeout=el_timeout)
             time_text = await time_element.inner_text() if time_element else "N/A"
             date_obj, date_str = self._parse_date(f"{date_text} {time_text}")
-            shared_by_el = el.locator('div:text("Shared by")')
-            await shared_by_el.wait_for(state="attached", timeout=el_timeout)
-            shared_by = await shared_by_el.inner_text() if shared_by_el else "N/A"
-            if album.shared:
+            default_user = await self.get_default_user()
+            try:
+                shared_by_el = el.locator('div:text("Shared by")')
+                await shared_by_el.wait_for(state="attached", timeout=200)
                 shared_by = (
-                    shared_by.replace("Shared by", "").strip() if shared_by else "N/A"
+                    (await shared_by_el.inner_text()).replace("Shared by", "").strip()
                 )
-            else:
-                default_user = await self.get_default_user()
-                logger.debug(f"Use default user {default_user}")
+            except PlaywrightTimeoutError:
+                if album.shared:
+                    logger.error(
+                        f"Could not get shared user, use default user ({default_user})."
+                    )
                 shared_by = default_user
             # make sure the source id did not change
             new_source_id = self.page.url.split("/")[-1].split("?")[0]
@@ -299,9 +313,10 @@ class GooglePhotosScraper:
                 source_id=source_id,
             )
 
-        except Exception as e:
-            logger.error(f"Getting picture info: {e}")
-            raise e
+        except PlaywrightTimeoutError as e:
+            raise RuntimeError(
+                f"Getting picture info for source '{source_id}' failed due to some timeout"
+            ) from e
 
     def _parse_date(self, date_str: str) -> tuple[datetime, str]:
         """Parse date string and return both datetime object and formatted string."""
@@ -309,9 +324,10 @@ class GooglePhotosScraper:
             date_obj = parser.parse(date_str)
             date_formatted = date_obj.strftime("%d.%m.%y %H:%M")
             return date_obj, date_formatted
-        except Exception as e:
-            logger.warning(f"Error parsing date '{date_str}': {e}")
-            return None, date_str
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Could not parse data '{date_str}'") from e
+        except OverflowError as e:
+            raise OverflowError(f"Date '{date_str}' is out of range") from e
 
     async def get_default_user(self) -> str:
         """Extract information from the current picture."""
@@ -329,10 +345,10 @@ class GooglePhotosScraper:
             console.print(f"Default user: [green]'{name}'[/green]")
             return name
 
-        except Exception as e:
-            logger.error(f"Getting picture info: {e}")
-            logger.debug(traceback(e))
-            return None
+        except PlaywrightTimeoutError as e:
+            raise TimeoutError("Could not get default user") from e
+        except ValueError as e:
+            raise ValueError("Could not get default user") from e
 
     async def process_album_from_db(
         self,
@@ -360,8 +376,15 @@ class GooglePhotosScraper:
 
         # Navigate to album - convert relative URL to absolute URL
         logger.info(f"Navigating to: {album.url}")
-        await self.page.goto(album.url)
-        await self.page.wait_for_load_state("domcontentloaded")
+        try:
+            await self.page.goto(
+                album.url, timeout=10000, wait_until="domcontentloaded"
+            )
+        except PlaywrightTimeoutError:
+            await self.page.reload(wait_until="commit")
+            await self.page.goto(
+                album.url, timeout=15000, wait_until="domcontentloaded"
+            )
         # Process photos
         processed_photos = 0
         duplicate_count = 0
@@ -371,13 +394,11 @@ class GooglePhotosScraper:
         logger.info("Looking for first image in album ...")
         first_image_url = None
         try:
-            # Look for the first a tag with aria-label containing "Photo -"
-            first_image_element = await self.page.wait_for_selector(
-                'a[aria-label*="Photo -"]', timeout=5000
-            )
-
+            # Look for the first tag with aria-label containing "Photo -"
+            first_image_loc = self.page.locator('a[aria-label*="Photo -"]')
+            await first_image_loc.first.wait_for(state="attached", timeout=5000)
             # Get the href attribute directly from the a tag
-            first_image_url = await first_image_element.get_attribute("href")
+            first_image_url = await first_image_loc.first.get_attribute("href")
 
             if first_image_url:
                 logger.debug(f"Found first image URL: {first_image_url}")
@@ -389,13 +410,12 @@ class GooglePhotosScraper:
 
                 # Navigate to the first image
                 logger.debug("Navigating to first image...")
-                await self.page.goto(first_image_url)
-                await self.page.wait_for_load_state("domcontentloaded")
+                await self.page.goto(first_image_url, wait_until="domcontentloaded")
             else:
                 console.print("[red]Could not get href from first image element[/red]")
 
-        except Exception as e:
-            console.print(f"[red]Could not find first image element: {e}[/red]")
+        except PlaywrightTimeoutError as e:
+            raise TimeoutError("Could not find first image element") from e
 
         if not first_image_url:
             console.print(
@@ -420,7 +440,7 @@ class GooglePhotosScraper:
         with Progress(
             SpinnerColumn(),
             "[cyan]{task.completed}/{task.total}",
-            BarColumn(bar_width=30),
+            BarColumn(bar_width=50),
             "[progress.percentage]{task.percentage:>3.0f}%",
             "•",
             "[progress.description]{task.description}",
@@ -433,15 +453,9 @@ class GooglePhotosScraper:
             )
 
             while processed_photos < album.items:
-                try:
-                    # get elements with tag c-wiz
-
+                try:  # catch album errors, then proceed to next album
                     picture_info = await self.get_photo_info(album)
                     logger.debug(f"Picture info: {picture_info}")
-
-                    if not picture_info:
-                        logger.error("Could not extract info for current image")
-                        break
                     if picture_info.filename == last_filename:
                         logger.debug(
                             "Filename did not change, waiting a bit longer and try again ..."
@@ -463,7 +477,7 @@ class GooglePhotosScraper:
                         progress.update(
                             task,
                             advance=0,
-                            description=f"{picture_info.filename}[/green] [red](taking a bit longer {'.' * duplicate_count})[/red]",
+                            description=f"[green]{picture_info.filename}[/green] [red](taking a bit longer {'.' * duplicate_count})[/red]",
                         )
                         if duplicate_count == DUPLICATE_NEXT_IMAGE_THRESHOLD:
                             logger.warning(
@@ -543,13 +557,14 @@ class GooglePhotosScraper:
                             description=f"{description_prefix}",
                         )
 
-                    except Exception as e:
-                        logger.error(f"Error saving picture to database: {e}")
+                    except Exception as e:  # catch all
                         insert_error(
                             f"Error saving picture {picture_info.filename}: {e}",
                             album.album_id,
                         )
-                        logger.debug(traceback(e))
+                        raise RuntimeError(
+                            f"Error saving picture {picture_info.filename} ({picture_info.source_id})"
+                        ) from e
 
                     source_id = await self.get_source_id()
                     # Navigate to next image
@@ -568,19 +583,21 @@ class GooglePhotosScraper:
                             )
 
                 except Exception as e:
-                    logger.error(f"Error processing picture: {e}")
-                    raise
+                    progress.update(
+                        task,
+                        advance=0,
+                        description=f"[red]{album.title}[/red] • [red]ERROR: [dim]{str(e).split('\n')[0]}[/red]",
+                    )
+                    raise RuntimeError(
+                        f"Error processing album {album.album_id} ({album.title})"
+                    ) from e
 
-        # Return to albums view, not needed since we go to next album anyway
-        # await self.page.goto("https://photos.google.com/albums")
-        # await self.page.wait_for_load_state("domcontentloaded")
-
-        console.print(
-            f"Processed [blue]{len(pictures)}[/blue] pictures from [green]'{album.title}'[/green] album"
-        )
-        if processed_users:
-            console.print(
-                f"Associated users: [blue]{', '.join(processed_users.keys())}[/blue]"
+            description = f"[green]{album.title}[/green] • "
+            description += f"[blue]{'Users' if len(processed_users) > 1 else 'User'}: [blue]{', '.join(processed_users.keys())}[/blue]"
+            progress.update(
+                task,
+                advance=0,
+                description=description,
             )
         return album
 

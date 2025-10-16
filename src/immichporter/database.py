@@ -234,7 +234,7 @@ def insert_error(
     error = Error(error_message=error_message, album_id=album_id)
     session.add(error)
     session.commit()
-    console.print(f"[red]Error logged: {error_message}[/red]")
+    logger.info(f"Error logged: {error_message}")
 
 
 def link_user_to_album(session: Session, album_id: int, user_id: int) -> None:
