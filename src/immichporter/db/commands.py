@@ -20,6 +20,8 @@ from immichporter.database import (
 )
 from immichporter.utils import sanitize_for_email, format_csv_value
 from immichporter.commands import logging_options
+from ..gphotos.utils import traceback
+from loguru import logger
 
 
 cli_db = click.Group("db", help="Database commands")
@@ -66,8 +68,9 @@ def prompt_with_default(text: str, default: str = None) -> str:
         else:
             return prompt(f"{text}: ")
 
-    except (KeyboardInterrupt, EOFError):
+    except (KeyboardInterrupt, EOFError) as e:
         click.echo("\nOperation cancelled", err=True)
+        logger.debug(traceback(e))
         raise
 
 
@@ -463,6 +466,7 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
 
             except Exception as e:
                 console.print(f"[red]Error dropping tables: {str(e)}")
+                logger.debug(traceback(e))
         return
 
     if name not in table_models:
@@ -508,9 +512,11 @@ def drop_table(name: str, all_tables: bool = False, force: bool = False):
         except SQLAlchemyError as e:
             session.rollback()
             console.print(f"[red]Error dropping table: {str(e)}")
+            logger.debug(traceback(e))
         except Exception as e:
             session.rollback()
             console.print(f"[red]Unexpected error: {str(e)}")
+            logger.debug(traceback(e))
 
 
 @cli_db.command("drop")

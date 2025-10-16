@@ -4,6 +4,18 @@ import re
 from typing import Optional
 from datetime import datetime
 
+from io import StringIO
+from rich.console import Console
+from rich.traceback import Traceback
+
+
+def traceback(e: Exception) -> str:
+    buffer = StringIO()
+    console = Console(file=buffer, force_terminal=True)
+    tb = Traceback.from_exception(type(e), e, e.__traceback__)
+    console.print(tb)
+    return "...\n" + buffer.getvalue()
+
 
 def parse_date_from_filename(filename: str) -> Optional[datetime]:
     """Parse date from Google Photos filename format."""

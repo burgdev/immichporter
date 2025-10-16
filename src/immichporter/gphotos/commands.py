@@ -68,6 +68,9 @@ async def setup_scraper(
     reset_db=False,
     log_level="warning",
     profile_dir=playwright_session_dir,
+    max_albums=0,
+    start_album=1,
+    album_fresh=False,
     clear_storage=False,
 ):
     # Update database path
@@ -78,7 +81,11 @@ async def setup_scraper(
 
     # Create scraper instance
     scraper = GooglePhotosScraper(
-        clear_storage=clear_storage, user_data_dir=profile_dir
+        max_albums=max_albums,
+        start_album=start_album,
+        album_fresh=album_fresh,
+        clear_storage=clear_storage,
+        user_data_dir=profile_dir,
     )
 
     init_database(reset_db=reset_db)
@@ -142,6 +149,9 @@ def albums(
             reset_db=reset_db,
             log_level=log_level,
             profile_dir=profile_dir,
+            max_albums=max_albums,
+            start_album=start_album,
+            album_fresh=start_album_fresh,
             clear_storage=clear_storage,
         )
 
@@ -220,6 +230,9 @@ def photos(
             reset_db=reset_db,
             log_level=log_level,
             profile_dir=profile_dir,
+            max_albums=max_albums,
+            start_album=start_album,
+            album_fresh=start_album_fresh,
             clear_storage=clear_storage,
         )
 
@@ -230,6 +243,7 @@ def photos(
                 start_album=start_album if not start_album_fresh else 1,
                 album_ids=album_ids,
                 not_finished=not_finished,
+                skip_existing=not start_album_fresh,
             )
 
             # Show database stats
