@@ -8,7 +8,7 @@ from loguru import logger
 
 from immichporter.models import Base, Album, User, Photo, Error, AlbumUser, SessionLocal
 
-from immichporter.schemas import AlbumInfo
+from immichporter.schemas import AlbumInfo, PictureInfo
 
 console = Console()
 
@@ -157,9 +157,14 @@ def insert_or_update_user(
 
 
 def insert_photo(
-    session: Session, picture_info, user_id: int, album_id: int
-) -> Optional[int]:
-    """Insert a photo, returning the photo ID if successful, None if duplicate."""
+    session: Session, picture_info: PictureInfo, album_id: int, update: bool = False
+) -> tuple[bool | None, int | None]:
+    """Insert a photo, returning a tuple (updated, photo_id | None), updated is None if photo was not inserted.
+
+    Returns:
+        A tuple (update, photo_id | None)
+    """
+    logger.debug(f"Inserting photo: {picture_info}")
     # Check if photo already exists
     existing_photo = (
         session.query(Photo)
@@ -167,21 +172,59 @@ def insert_photo(
         .first()
     )
 
-    if existing_photo:
-        return None
+    if existing_photo and not update:
+        logger.info(f"Photo already exists: {picture_info.filename} (not updated)")
+        return None, existing_photo.id
+    elif existing_photo:  # update
+        something_changed = False
+        for attr in ["filename", "date_taken", "user_id", "source_id"]:
+            if getattr(picture_info, attr) != getattr(existing_photo, attr):
+                if something_changed is False:
+                    logger.info(
+                        f"Photo #{existing_photo.id} '{picture_info.filename}' updates:"
+                    )
+                if attr == "user_id":
+                    user_name = picture_info.user
+                    logger.info(
+                        f"  - {f'{attr}:':<15} from '{getattr(existing_photo, attr)}' to '{getattr(picture_info, attr)}' ({user_name})"
+                    )
+                else:
+                    logger.info(
+                        f"  - {f'{attr}:':<15} from '{getattr(existing_photo, attr)}' to '{getattr(picture_info, attr)}'"
+                    )
+                setattr(existing_photo, attr, getattr(picture_info, attr))
+                something_changed = True
+            elif getattr(picture_info, attr) is None:
+                if something_changed is False:
+                    logger.warning(
+                        f"Photo #{existing_photo.id} '{picture_info.filename}' updates:"
+                    )
+                logger.warning(f"  - {f'{attr}:':<15} is NULL!")
+                something_changed = True
+
+        if something_changed:
+            # existing_photo.filename = picture_info.filename
+            # existing_photo.date_taken = picture_info.date_taken
+            # existing_photo.user_id = picture_info.user_id
+            # existing_photo.source_id = picture_info.source_id
+            session.add(existing_photo)
+            session.commit()
+            return True, existing_photo.id
+        else:
+            return None, existing_photo.id
 
     # Insert new photo
     photo = Photo(
         filename=picture_info.filename,
         date_taken=picture_info.date_taken,
         album_id=album_id,
-        user_id=user_id,
+        user_id=picture_info.user_id,
         source_id=picture_info.source_id,
     )
     session.add(photo)
     session.commit()
     logger.info(f"Added photo: {picture_info.filename}")
-    return photo.id
+    return False, photo.id
 
 
 def insert_error(
@@ -234,6 +277,7 @@ def update_album_processed_items(
     session: Session, album_id: int, processed_items: int
 ) -> None:
     """Update the number of processed items for an album."""
+    logger.debug(f"Updating album {album_id} processed items to {processed_items}")
     album = session.query(Album).filter_by(id=album_id).first()
     if album:
         album.processed_items = processed_items

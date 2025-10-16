@@ -36,6 +36,7 @@ class PictureInfo:
     date_taken: Optional[datetime]
     user: Optional[str]
     source_id: str
+    user_id: int | None = None
 
 
 @dataclass
