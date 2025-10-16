@@ -583,10 +583,11 @@ class GooglePhotosScraper:
                             )
 
                 except Exception as e:
+                    err_str = str(e).split("\n")[0]
                     progress.update(
                         task,
                         advance=0,
-                        description=f"[red]{album.title}[/red] • [red]ERROR: [dim]{str(e).split('\n')[0]}[/red]",
+                        description=f"[red]{album.title}[/red] • [red]ERROR: [dim]{err_str}[/red]",
                     )
                     raise RuntimeError(
                         f"Error processing album {album.album_id} ({album.title})"
