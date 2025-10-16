@@ -76,11 +76,17 @@ immichporter db edit-users # select which users should be added to immich
 # see the database with https://sqlitebrowser.org
 sqlitebrowser immichporter.db
 
+# !! CAUTION: create a backup of your immich database before running this commands !!
+
 # this steps are needed to get the immich ids into the 'immichporter.db' sqlite database
-immichporter immich update-users
+# and create non existing users and albums in immich
 immichporter immich update-albums
+immichporter immich update-users
+
 
 # delete ablums (optional) if you want to start over
+# !! this delete all albums in immich !!
+# this is only needed if you have different album names in immich
 immichporter immich delete-albums
 
 # sync albums to immich (create albums and users, add assets to albums)
@@ -94,9 +100,10 @@ immichporter sync-albums
 ## TODO:
 
 * [x] export albums with photos and people from gphotos (first version)
-* [ ] import to immich
+* [ ] import to immich (80%)
+* [ ] move assets to correct user (50%)
 * [ ] improve documentation
-* [ ] imporve gphotos export stability
+* [ ] improve gphotos export stability (80%)
 
 <!-- # --8<-- [end:readme_index] <!-- -->
 
