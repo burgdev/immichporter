@@ -29,8 +29,6 @@
 
 Use [google takeout](https://takeout.google.com) to export your google photos assets and [`immich-go`](https://github.com/simulot/immich-go) to import the data into immich.
 
-> [!IMPORTANT]
-
 Use [`immichporter`](https://github.com/burgdev/immichporter) to get all assets and user per album and update/create all albums in immich again.
 It can add all users again to shared albums and you can even move assets to the correct user.
 
