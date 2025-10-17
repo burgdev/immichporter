@@ -17,6 +17,7 @@ class AlbumInfo:
         album_id: Internal database ID of the album
         processed_items: Number of items that have been processed
         created_at: When the album was created in the database
+        all_photos_saved: Whether all photos in the album have been saved
     """
 
     title: str
@@ -26,6 +27,7 @@ class AlbumInfo:
     album_id: int | None = None
     processed_items: int = 0
     created_at: str | None = None
+    all_photos_saved: bool = False
 
 
 @dataclass
@@ -37,6 +39,7 @@ class PictureInfo:
     user: Optional[str]
     source_id: str
     user_id: int | None = None
+    saved_to_your_photos: bool = False
 
 
 @dataclass

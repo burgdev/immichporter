@@ -84,6 +84,7 @@ class Photo(Base):
     filename = Column(String, nullable=False)
     source_id = Column(String, nullable=False, unique=True, index=True)
     immich_id = Column(String, nullable=True, unique=True, index=True)
+    saved_to_your_photos = Column(Boolean, default=False, nullable=False)
 
     # Relationships
     album = relationship("Album", back_populates="photos")

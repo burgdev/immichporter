@@ -1,7 +1,7 @@
 """Database operations for immichporter."""
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, case
 from typing import List, Dict, Any, Optional
 from rich.console import Console
 from loguru import logger
@@ -77,6 +77,21 @@ def init_database(reset_db: bool = False) -> None:
                 conn.execute(text("ALTER TABLE photos ADD COLUMN immich_id STRING"))
                 console.print(
                     "[yellow]Applied migration: Added immich_id column to photos table[/yellow]"
+                )
+        if "saved_to_your_photos" not in columns:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE photos ADD COLUMN saved_to_your_photos BOOLEAN DEFAULT FALSE NOT NULL"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "UPDATE photos SET saved_to_your_photos = FALSE WHERE saved_to_your_photos IS NULL"
+                    )
+                )
+                console.print(
+                    "[yellow]Applied migration: Added saved_to_your_photos column to photos table[/yellow]"
                 )
 
     # Migration: Add immich_id to albums table
@@ -177,7 +192,13 @@ def insert_photo(
         return None, existing_photo.id
     elif existing_photo:  # update
         something_changed = False
-        for attr in ["filename", "date_taken", "user_id", "source_id"]:
+        for attr in [
+            "filename",
+            "date_taken",
+            "user_id",
+            "source_id",
+            "saved_to_your_photos",
+        ]:
             if getattr(picture_info, attr) != getattr(existing_photo, attr):
                 if something_changed is False:
                     logger.info(
@@ -203,10 +224,6 @@ def insert_photo(
                 something_changed = True
 
         if something_changed:
-            # existing_photo.filename = picture_info.filename
-            # existing_photo.date_taken = picture_info.date_taken
-            # existing_photo.user_id = picture_info.user_id
-            # existing_photo.source_id = picture_info.source_id
             session.add(existing_photo)
             session.commit()
             return True, existing_photo.id
@@ -220,6 +237,7 @@ def insert_photo(
         album_id=album_id,
         user_id=picture_info.user_id,
         source_id=picture_info.source_id,
+        saved_to_your_photos=picture_info.saved_to_your_photos,
     )
     session.add(photo)
     session.commit()
@@ -361,6 +379,14 @@ def get_albums_from_db(
         offset: Number of albums to skip
         not_finished: If True, only return albums that are not fully processed
     """
+    # Subquery to count not saved photos per album
+    not_saved_photos = (
+        session.query(Photo.album_id, func.count(Photo.id).label("not_saved_count"))
+        .filter(Photo.saved_to_your_photos == False)  # noqa: E712
+        .group_by(Photo.album_id)
+        .subquery()
+    )
+
     query = session.query(
         Album.id,
         Album.source_url,
@@ -369,8 +395,15 @@ def get_albums_from_db(
         Album.processed_items,
         Album.shared,
         Album.created_at,
+        # Use case to determine if all photos are saved
+        # If count of not_saved photos is None (no photos) or 0, then all are saved
+        case(
+            (func.coalesce(not_saved_photos.c.not_saved_count, 0) == 0, True),
+            else_=False,
+        ).label("all_photos_saved"),
     ).filter_by(source_type="gphoto")
-
+    # Left join with the not_saved_photos subquery
+    query = query.outerjoin(not_saved_photos, Album.id == not_saved_photos.c.album_id)
     if not_finished:
         query = query.filter(Album.processed_items < Album.items)
 
@@ -392,6 +425,7 @@ def get_albums_from_db(
             processed_items=getattr(album, "processed_items", 0),
             created_at=getattr(album, "created_at", None),
             url=album.source_url,
+            all_photos_saved=album.all_photos_saved,
         )
         for album in res
     ]
