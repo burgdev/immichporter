@@ -69,6 +69,7 @@ class GooglePhotosScraper:
         album_fresh: bool = False,
         albums_only: bool = False,
         clear_storage: bool = False,
+        headless: bool = True,
         user_data_dir: str = playwright_session_dir,
     ):
         self.max_albums = max_albums
@@ -81,6 +82,7 @@ class GooglePhotosScraper:
         self.playwright = None
         self.context = None
         self.page = None
+        self.headless = headless
         self._default_user = None
         self._info_box_parent_element = None
 
@@ -89,7 +91,10 @@ class GooglePhotosScraper:
         logger.info("Starting Playwright ...")
         self.playwright = await async_playwright().start()
 
-        console.print("Launching browser ...")
+        if self.headless:
+            logger.info("Launching headless browser ...")
+        else:
+            logger.info("Launching browser ...")
         # Add arguments to force new session and prevent conflicts
         storage_args = [
             "--clear-browsing-data",
@@ -103,7 +108,7 @@ class GooglePhotosScraper:
         # Launch non-persistent context to avoid session conflicts
         self.context = await self.playwright.chromium.launch_persistent_context(
             user_data_dir=self.user_data_dir,
-            headless=False,
+            headless=self.headless,
             executable_path=None,  # Use Playwright's Chromium
             args=all_args,
             ignore_default_args=["--enable-automation"],
@@ -289,16 +294,26 @@ class GooglePhotosScraper:
             default_user = await self.get_default_user()
             try:
                 shared_by_el = el.locator('div:text("Shared by")')
-                await shared_by_el.wait_for(state="attached", timeout=200)
+                await shared_by_el.wait_for(state="attached", timeout=300)
                 shared_by = (
                     (await shared_by_el.inner_text()).replace("Shared by", "").strip()
                 )
             except PlaywrightTimeoutError:
                 if album.shared:
                     logger.error(
-                        f"Could not get shared user, use default user ({default_user})."
+                        f"{filename}: could not get shared user, use default user ({default_user})."
                     )
                 shared_by = default_user
+            if album.shared:
+                saved_to_el = el.locator('div:text("Saved to your photos")')
+                try:
+                    await saved_to_el.wait_for(state="attached", timeout=200)
+                    saved_to_your_photos = True
+                except PlaywrightTimeoutError:
+                    logger.info(f"{filename}: not saved to your photos")
+                    saved_to_your_photos = False
+            else:
+                saved_to_your_photos = True
             # make sure the source id did not change
             new_source_id = self.page.url.split("/")[-1].split("?")[0]
             if new_source_id != source_id:
@@ -311,6 +326,7 @@ class GooglePhotosScraper:
                 date_taken=date_obj,
                 user=shared_by,
                 source_id=source_id,
+                saved_to_your_photos=saved_to_your_photos,
             )
 
         except PlaywrightTimeoutError as e:
@@ -726,8 +742,9 @@ class GooglePhotosScraper:
         # Get albums from database
         with get_db_session() as session:
             # Get albums with pagination
-            console.print("Processing albums from database ...")
-            logger.info(f"Starting from album position {start_album}")
+            logger.info("Processing albums from database ...")
+            if start_album > 1:
+                logger.info(f"Starting from album position {start_album}")
             if album_ids:
                 max_albums = None
                 start_album = 1

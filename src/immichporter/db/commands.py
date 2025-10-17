@@ -94,6 +94,7 @@ def init(log_level: str):
 )
 def show_albums(not_finished, log_level: str):
     """Show albums in the database."""
+    format = "table"  # TODO: add export
     with get_db_session() as session:
         albums = get_albums_from_db(session, not_finished=not_finished)
 
@@ -114,8 +115,11 @@ def show_albums(not_finished, log_level: str):
         table.add_column("Items", style="green")
         table.add_column("Processed", style="yellow")
         table.add_column("Shared", style="red")
+        table.add_column("Saved", style="red")
         table.add_column("Created", style="dim")
 
+        true_sign = "✓" if format == "table" else True
+        false_sign = "✗" if format == "table" else False
         for album in albums:
             # Calculate percentage with floor to avoid showing 100% until fully processed
             percentage = (
@@ -136,7 +140,8 @@ def show_albums(not_finished, log_level: str):
                 title_text,
                 str(album.items),
                 f"{album.processed_items} [dim]{percentage_str}[/]",
-                "Yes" if album.shared else "No",
+                true_sign if album.shared else false_sign,
+                true_sign if album.all_photos_saved else false_sign,
                 str(album.created_at)[:19] if album.created_at else "N/A",
             )
 

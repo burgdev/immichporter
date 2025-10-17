@@ -62,6 +62,17 @@ def playwright_options(func):
     return func
 
 
+def playwright_headless_options(func):
+    """Playwright options. Use variable `show_browser` in your function."""
+    func = click.option(
+        "-b",
+        "--show-browser",
+        is_flag=True,
+        help="Show browser",
+    )(func)
+    return func
+
+
 # Common scraper setup
 async def setup_scraper(
     db_path="immichporter.db",
@@ -72,6 +83,7 @@ async def setup_scraper(
     start_album=1,
     album_fresh=False,
     clear_storage=False,
+    headless=True,
 ):
     # Update database path
     global DATABASE_PATH
@@ -86,6 +98,7 @@ async def setup_scraper(
         album_fresh=album_fresh,
         clear_storage=clear_storage,
         user_data_dir=profile_dir,
+        headless=headless,
     )
 
     init_database(reset_db=reset_db)
@@ -127,6 +140,7 @@ def login(log_level, clear_storage, profile_dir):
 @database_options
 @logging_options
 @playwright_options
+@playwright_headless_options
 def albums(
     max_albums,
     start_album,
@@ -136,6 +150,7 @@ def albums(
     log_level,
     clear_storage,
     profile_dir,
+    show_browser,
 ):
     """List and export albums from Google Photos."""
     max_albums = max_albums if max_albums > 0 else 100000
@@ -153,6 +168,7 @@ def albums(
             start_album=start_album,
             album_fresh=start_album_fresh,
             clear_storage=clear_storage,
+            headless=not show_browser,
         )
 
         try:
@@ -197,6 +213,7 @@ def albums(
 @database_options
 @logging_options
 @playwright_options
+@playwright_headless_options
 def photos(
     max_albums,
     start_album,
@@ -208,6 +225,7 @@ def photos(
     log_level,
     clear_storage,
     profile_dir,
+    show_browser,
 ):
     """Export photos from Google Photos albums.
 
@@ -234,6 +252,7 @@ def photos(
             start_album=start_album,
             album_fresh=start_album_fresh,
             clear_storage=clear_storage,
+            headless=not show_browser,
         )
 
         try:
