@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 from dateutil import parser
 import time
+import click
 from typing import List, Optional
 from loguru import logger
 from rich.progress import Progress, SpinnerColumn, BarColumn
@@ -294,7 +295,9 @@ class GooglePhotosScraper:
             default_user = await self.get_default_user()
             try:
                 shared_by_el = el.locator('div:text("Shared by")')
-                await shared_by_el.wait_for(state="attached", timeout=300)
+                await shared_by_el.wait_for(
+                    state="attached", timeout=1500 if not album.shared else 200
+                )
                 shared_by = (
                     (await shared_by_el.inner_text()).replace("Shared by", "").strip()
                 )
@@ -448,11 +451,6 @@ class GooglePhotosScraper:
         # Skip check already done at the beginning of the method
 
         # Get current photo count to continue from where we left off
-        # with Progress(
-        #    SpinnerColumn(),
-        #    TextColumn("[progress.description]{task.description}"),
-        #    console=console,
-        # ) as progress:
         with Progress(
             SpinnerColumn(),
             "[cyan]{task.completed}/{task.total}",
@@ -590,12 +588,32 @@ class GooglePhotosScraper:
                     # make sure the page url changed
                     old_source_id = source_id
                     timer = time.perf_counter()
+                    reload = False
+                    key_press = False
                     while old_source_id == source_id and processed_photos < album.items:
                         source_id = await self.get_source_id()
                         await asyncio.sleep(0.005)
-                        if time.perf_counter() - timer > 5:  # wait max 5 seconds
+                        if time.perf_counter() - timer > 2 and not reload:
+                            reload = True
+                            await self.page.reload(wait_until="domcontentloaded")
+                            source_id = await self.get_source_id()
+                            click.confirm(
+                                f"Reloaded. Source id '{source_id}'. Proceed?",
+                                default=True,
+                            )
+                        elif time.perf_counter() - timer > 5 and not key_press:
+                            await self.keyboard_press(
+                                "ArrowRight", delay=IMAGE_NAVIGATION_DELAY
+                            )
+                            source_id = await self.get_source_id()
+                            key_press = True
+                            click.confirm(
+                                f"Pressed arrow right. Source id '{source_id}'. Proceed?",
+                                default=True,
+                            )
+                        elif time.perf_counter() - timer > 8:
                             raise TimeoutError(
-                                f"Timeout waiting for page to change (current source id: {source_id})"
+                                f"Timeout waiting for page to change (current source id: {source_id}, duration: {time.perf_counter() - timer:.2f}s)"
                             )
 
                 except Exception as e:

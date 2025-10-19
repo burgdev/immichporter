@@ -123,6 +123,7 @@ def login(log_level, clear_storage, profile_dir):
             log_level=log_level,
             profile_dir=profile_dir,
             clear_storage=clear_storage,
+            headless=False,
         )
 
         try:

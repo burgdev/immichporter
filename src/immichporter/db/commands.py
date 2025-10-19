@@ -87,16 +87,24 @@ def init(log_level: str):
 @cli_db.command()
 @logging_options
 @click.option(
-    "-n",
+    "-i",
     "--not-finished",
     is_flag=True,
     help="Show only albums that are not fully processed",
 )
-def show_albums(not_finished, log_level: str):
+@click.option(
+    "-a",
+    "--not-saved",
+    is_flag=True,
+    help="Show only albums that are not fully saved",
+)
+def show_albums(not_finished, not_saved, log_level: str):
     """Show albums in the database."""
     format = "table"  # TODO: add export
     with get_db_session() as session:
-        albums = get_albums_from_db(session, not_finished=not_finished)
+        albums = get_albums_from_db(
+            session, not_finished=not_finished, not_saved=not_saved
+        )
 
         if not albums:
             msg = "No albums found"

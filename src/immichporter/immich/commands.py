@@ -700,6 +700,9 @@ def adjust_owners_command(
                     f"[cyan]Updating assets for user {user.immich_user_id}[/]",
                     total=total_to_update,
                 )
+                logger.info(
+                    f"Updating assets for user {user.immich_user_id} ({total_to_update} assets)"
+                )
 
                 # Process batches
                 for i in range(0, len(immich_ids), batch_size):
@@ -716,7 +719,10 @@ def adjust_owners_command(
                                 advance=updated,
                                 description=f"[cyan]Updating assets for user {user.immich_user_id}[/]",
                             )
-                            time.sleep(0.1)  # Small delay to allow progress to update
+                            if len(immich_ids) < 500:
+                                time.sleep(
+                                    0.07
+                                )  # Small delay to allow progress to update
                     except Exception as e:
                         progress.console.print(
                             f"[red]Error updating batch {i // batch_size + 1}: {e}[/]"
