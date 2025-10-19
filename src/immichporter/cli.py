@@ -35,7 +35,9 @@ def handle_keyboard_interrupt(exc_type, exc_value, exc_traceback):
     else:
         logger.debug(traceback(exc_value))
         console.print("[red]Exception [dim]" + str(exc_value) + "[/]")
-        console.print("[dim]use -l debug to see traceback[/dim]")
+        console.print(
+            "[dim]Use [i][yellow]-l debug[/yellow][/i] to see traceback[/dim]"
+        )
         sys.exit(1)
         # sys.__excepthook__(exc_type, exc_value, exc_traceback)
 

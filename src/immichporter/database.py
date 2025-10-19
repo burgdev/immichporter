@@ -370,6 +370,7 @@ def get_albums_from_db(
     offset: int = 0,
     not_finished: bool = False,
     album_ids: list[int] | None = None,
+    not_saved: bool = False,
 ) -> list[AlbumInfo]:
     """Get albums from database with pagination.
 
@@ -378,6 +379,7 @@ def get_albums_from_db(
         limit: Maximum number of albums to return
         offset: Number of albums to skip
         not_finished: If True, only return albums that are not fully processed
+        not_saved: If True, only return albums that are not fully saved
     """
     # Subquery to count not saved photos per album
     not_saved_photos = (
@@ -406,6 +408,8 @@ def get_albums_from_db(
     query = query.outerjoin(not_saved_photos, Album.id == not_saved_photos.c.album_id)
     if not_finished:
         query = query.filter(Album.processed_items < Album.items)
+    if not_saved:
+        query = query.filter(not_saved_photos.c.not_saved_count > 0)
 
     query = query.order_by(Album.id)
 

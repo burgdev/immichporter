@@ -69,7 +69,6 @@ class GooglePhotosScraper:
         album_fresh: bool = False,
         albums_only: bool = False,
         clear_storage: bool = False,
-        headless: bool = True,
         user_data_dir: str = playwright_session_dir,
     ):
         self.max_albums = max_albums
@@ -82,7 +81,6 @@ class GooglePhotosScraper:
         self.playwright = None
         self.context = None
         self.page = None
-        self.headless = headless
         self._default_user = None
         self._info_box_parent_element = None
 
@@ -91,10 +89,7 @@ class GooglePhotosScraper:
         logger.info("Starting Playwright ...")
         self.playwright = await async_playwright().start()
 
-        if self.headless:
-            logger.info("Launching headless browser ...")
-        else:
-            logger.info("Launching browser ...")
+        console.print("Launching browser ...")
         # Add arguments to force new session and prevent conflicts
         storage_args = [
             "--clear-browsing-data",
@@ -108,7 +103,7 @@ class GooglePhotosScraper:
         # Launch non-persistent context to avoid session conflicts
         self.context = await self.playwright.chromium.launch_persistent_context(
             user_data_dir=self.user_data_dir,
-            headless=self.headless,
+            headless=False,
             executable_path=None,  # Use Playwright's Chromium
             args=all_args,
             ignore_default_args=["--enable-automation"],
@@ -294,7 +289,9 @@ class GooglePhotosScraper:
             default_user = await self.get_default_user()
             try:
                 shared_by_el = el.locator('div:text("Shared by")')
-                await shared_by_el.wait_for(state="attached", timeout=300)
+                await shared_by_el.wait_for(
+                    state="attached", timeout=1500 if not album.shared else 200
+                )
                 shared_by = (
                     (await shared_by_el.inner_text()).replace("Shared by", "").strip()
                 )
@@ -448,11 +445,6 @@ class GooglePhotosScraper:
         # Skip check already done at the beginning of the method
 
         # Get current photo count to continue from where we left off
-        # with Progress(
-        #    SpinnerColumn(),
-        #    TextColumn("[progress.description]{task.description}"),
-        #    console=console,
-        # ) as progress:
         with Progress(
             SpinnerColumn(),
             "[cyan]{task.completed}/{task.total}",
@@ -590,12 +582,24 @@ class GooglePhotosScraper:
                     # make sure the page url changed
                     old_source_id = source_id
                     timer = time.perf_counter()
+                    reload = False
+                    key_press = False
                     while old_source_id == source_id and processed_photos < album.items:
                         source_id = await self.get_source_id()
                         await asyncio.sleep(0.005)
-                        if time.perf_counter() - timer > 5:  # wait max 5 seconds
+                        if time.perf_counter() - timer > 2 and not reload:
+                            reload = True
+                            await self.page.reload(wait_until="domcontentloaded")
+                            source_id = await self.get_source_id()
+                        elif time.perf_counter() - timer > 5 and not key_press:
+                            await self.keyboard_press(
+                                "ArrowRight", delay=IMAGE_NAVIGATION_DELAY
+                            )
+                            source_id = await self.get_source_id()
+                            key_press = True
+                        elif time.perf_counter() - timer > 8:
                             raise TimeoutError(
-                                f"Timeout waiting for page to change (current source id: {source_id})"
+                                f"Timeout waiting for page to change (current source id: {source_id}, duration: {time.perf_counter() - timer:.2f}s)"
                             )
 
                 except Exception as e:
