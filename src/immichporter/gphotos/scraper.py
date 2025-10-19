@@ -4,7 +4,6 @@ import asyncio
 from datetime import datetime
 from dateutil import parser
 import time
-import click
 from typing import List, Optional
 from loguru import logger
 from rich.progress import Progress, SpinnerColumn, BarColumn
@@ -70,7 +69,6 @@ class GooglePhotosScraper:
         album_fresh: bool = False,
         albums_only: bool = False,
         clear_storage: bool = False,
-        headless: bool = True,
         user_data_dir: str = playwright_session_dir,
     ):
         self.max_albums = max_albums
@@ -83,7 +81,6 @@ class GooglePhotosScraper:
         self.playwright = None
         self.context = None
         self.page = None
-        self.headless = headless
         self._default_user = None
         self._info_box_parent_element = None
 
@@ -92,10 +89,7 @@ class GooglePhotosScraper:
         logger.info("Starting Playwright ...")
         self.playwright = await async_playwright().start()
 
-        if self.headless:
-            logger.info("Launching headless browser ...")
-        else:
-            logger.info("Launching browser ...")
+        console.print("Launching browser ...")
         # Add arguments to force new session and prevent conflicts
         storage_args = [
             "--clear-browsing-data",
@@ -109,7 +103,7 @@ class GooglePhotosScraper:
         # Launch non-persistent context to avoid session conflicts
         self.context = await self.playwright.chromium.launch_persistent_context(
             user_data_dir=self.user_data_dir,
-            headless=self.headless,
+            headless=False,
             executable_path=None,  # Use Playwright's Chromium
             args=all_args,
             ignore_default_args=["--enable-automation"],
@@ -597,20 +591,12 @@ class GooglePhotosScraper:
                             reload = True
                             await self.page.reload(wait_until="domcontentloaded")
                             source_id = await self.get_source_id()
-                            click.confirm(
-                                f"Reloaded. Source id '{source_id}'. Proceed?",
-                                default=True,
-                            )
                         elif time.perf_counter() - timer > 5 and not key_press:
                             await self.keyboard_press(
                                 "ArrowRight", delay=IMAGE_NAVIGATION_DELAY
                             )
                             source_id = await self.get_source_id()
                             key_press = True
-                            click.confirm(
-                                f"Pressed arrow right. Source id '{source_id}'. Proceed?",
-                                default=True,
-                            )
                         elif time.perf_counter() - timer > 8:
                             raise TimeoutError(
                                 f"Timeout waiting for page to change (current source id: {source_id}, duration: {time.perf_counter() - timer:.2f}s)"
