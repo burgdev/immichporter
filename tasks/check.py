@@ -39,7 +39,7 @@ def deps(c: Ctx):
 def types(c: Ctx):
     """Static type checking"""
     header(doc())
-    c.run("uv run pyright  src", echo=True, pty=True)
+    c.run("uv run ty check src", echo=True, pty=True)
 
 
 @task
