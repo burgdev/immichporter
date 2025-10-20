@@ -179,8 +179,7 @@ class GooglePhotosScraper:
                 f"Playwright not available ({e}), will try to install browsers..."
             )
 
-        console.print("[yellow]Installing Playwright browsers...[/yellow]")
-        logger.info("Installing Playwright browsers...")
+        console.print("Installing required browser (this can take a while) ...")
 
         try:
             # Install playwright browsers
@@ -196,8 +195,7 @@ class GooglePhotosScraper:
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
 
-            logger.info("Playwright browsers installed successfully")
-            console.print("[green]Playwright browsers installed successfully[/green]")
+            console.print("[green]Browser installed successfully[/green]")
 
         except subprocess.TimeoutExpired:
             error_msg = "Browser installation timed out"
