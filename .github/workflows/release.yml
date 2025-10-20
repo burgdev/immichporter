@@ -20,13 +20,16 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
 
+      - name: Install just
+        uses: extractions/setup-just@v3
+
       - name: Get latest changelog
         id: changelog
         run: |
-          VERSION=$(uv run inv version); echo "Current version: $VERSION"
+          VERSION=$(just project version); echo "Current version: $VERSION"
           echo "version=${VERSION}" >> $GITHUB_ENV
           echo "body<<EOF" >> $GITHUB_ENV
-          BODY=$(uv run inv changelog); echo "Changelog body:"; echo "$BODY"
+          BODY=$(just changelog); echo "Changelog body:"; echo "$BODY"
           echo "${BODY}" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 

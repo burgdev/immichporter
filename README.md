@@ -95,13 +95,15 @@ immichporter sync-albums --dry-run
 immichporter sync-albums
 ```
 
-## TODO:
+## TODO
 
 * [x] export albums with photos and people from gphotos (first version)
-* [ ] import to immich (80%)
-* [ ] move assets to correct user (50%)
+* [x] import to immich
+* [x] move assets to correct user
 * [ ] improve documentation
 * [ ] improve gphotos export stability (80%)
+* [ ] interactive wizard with ui (web or gui ...)
+* [ ] submit changes to server for an admin to review and update
 
 <!-- # --8<-- [end:readme_index] <!-- -->
 
@@ -114,6 +116,13 @@ For complete documentation, including API reference and advanced usage, please v
 <!-- # --8<-- [start:readme_development] <!-- -->
 ## Development
 
+### Dependencies
+
+* [uv](https://github.com/astral-sh/uv)
+* [just](https://github.com/casey/just)
+
+### Setup
+
 To set up the development environment:
 
 ```bash
@@ -122,8 +131,8 @@ git clone https://github.com/burgdev/immichporter.git
 cd immichporter
 
 # Install development dependencies
-make
-uv run invoke install # install 'dev' and 'test' dependencies per default, use --all to install all dependencies
+just install
+source .venv/bin/activate
 ```
 <!-- # --8<-- [end:readme_development] <!-- -->
 
