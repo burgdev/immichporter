@@ -17,8 +17,10 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
 
-      - name: Run checks
+      - name: Install just
         uses: extractions/setup-just@v3
+
+      - name: Run checks
         run: just check
 
   tests:
@@ -49,6 +51,8 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
 
-      - name: Check if documentation can be built
+      - name: Install just
         uses: extractions/setup-just@v3
+
+      - name: Check if documentation can be built
         run: just docs build

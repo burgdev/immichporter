@@ -20,8 +20,10 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
 
-      - name: Extract latest version
+      - name: Install just
         uses: extractions/setup-just@v3
+
+      - name: Extract latest version
         id: latest-version
         run: |
           VERSION=$(just project version); echo "Current version: $VERSION"

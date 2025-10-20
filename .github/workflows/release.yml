@@ -20,8 +20,10 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
 
-      - name: Get latest changelog
+      - name: Install just
         uses: extractions/setup-just@v3
+
+      - name: Get latest changelog
         id: changelog
         run: |
           VERSION=$(just project version); echo "Current version: $VERSION"
