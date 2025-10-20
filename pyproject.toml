@@ -48,7 +48,6 @@ dev = [
   "environs>=11.2.1",
   "git-cliff>=2.7.0",
   "humanize>=4.11.0",
-  "invoke>=2.2.0",
   "jinja2>=3.1.6",
   "loguru>=0.7.3",
   "openapi-python-client>=0.26.1",

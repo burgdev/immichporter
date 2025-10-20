@@ -25,3 +25,14 @@ help group="" task="":
     echo "    {{BLUE}}just help check{{NORMAL}}"
     echo
     just-help {{group}} {{task}}
+
+
+# 📦 Alias for 'just project install'.
+[group("aliases")]
+install:
+    just project install
+
+# 🚀 Alias for 'just project release'.
+[group("aliases")]
+release:
+    just project release
