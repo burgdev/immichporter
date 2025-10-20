@@ -21,9 +21,10 @@ jobs:
         uses: ./.github/actions/setup-venv
 
       - name: Extract latest version
+        uses: extractions/setup-just@v3
         id: latest-version
         run: |
-          VERSION=$(uv run inv version); echo "Current version: $VERSION"
+          VERSION=$(just project version); echo "Current version: $VERSION"
           echo "version=$VERSION" >> $GITHUB_ENV
 
       - name: Check if tag exists
