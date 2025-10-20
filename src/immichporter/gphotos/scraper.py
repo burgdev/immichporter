@@ -5,6 +5,7 @@ from datetime import datetime
 from dateutil import parser
 from pathlib import Path
 import time
+import subprocess
 from typing import List, Optional
 from loguru import logger
 from rich.progress import Progress, SpinnerColumn, BarColumn
@@ -90,6 +91,14 @@ class GooglePhotosScraper:
     async def setup_browser(self) -> None:
         """Initialize and setup the browser context."""
         logger.info("Starting Playwright ...")
+
+        # Check if browsers are installed, install if not
+        try:
+            await self._ensure_playwright_browsers()
+        except Exception as e:
+            logger.error(f"Failed to ensure Playwright browsers are installed: {e}")
+            raise RuntimeError("Cannot proceed without Playwright browsers") from e
+
         self.playwright = await async_playwright().start()
 
         console.print("Launching browser ...")
@@ -124,9 +133,80 @@ class GooglePhotosScraper:
         )
         # await self.page.set_viewport_size({"width": 1280, "height": 720})
 
-        logger.debug("Adding stealth script ...")
-        # Set up stealth mode
-        await self.page.add_init_script(STEALTH_INIT_SCRIPT)
+    async def _ensure_playwright_browsers(self) -> None:
+        """Ensure Playwright browsers are installed."""
+        try:
+            # Simple check: try to import playwright and see if it works
+            import playwright  # noqa: F401
+
+            logger.info("Playwright is available")
+
+            # Try to check if browsers are installed by checking common paths
+            import os
+
+            possible_paths = [
+                os.path.expanduser(
+                    "~/.cache/ms-playwright/chromium-*/**/chrome"
+                ),  # Linux/macOS
+                os.path.expanduser(
+                    "~/.cache/ms-playwright/chromium-*/chrome"
+                ),  # Linux/macOS
+                os.path.expanduser(
+                    "~/AppData/Local/ms-playwright/chromium-*/chrome.exe"
+                ),  # Windows
+                os.path.expanduser(
+                    "~/AppData/Local/ms-playwright/chromium-*/**/chrome.exe"
+                ),  # Windows
+            ]
+
+            browsers_installed = False
+            for pattern in possible_paths:
+                import glob
+
+                if glob.glob(pattern):
+                    browsers_installed = True
+                    break
+
+            if browsers_installed:
+                logger.info("Playwright browsers are already installed")
+                return
+            else:
+                logger.info("Playwright browsers not found, will install...")
+
+        except ImportError as e:
+            # Playwright not installed, try to install browsers anyway
+            logger.info(
+                f"Playwright not available ({e}), will try to install browsers..."
+            )
+
+        console.print("[yellow]Installing Playwright browsers...[/yellow]")
+        logger.info("Installing Playwright browsers...")
+
+        try:
+            # Install playwright browsers
+            result = subprocess.run(
+                ["playwright", "install", "chromium"],
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minute timeout for browser installation
+            )
+
+            if result.returncode != 0:
+                error_msg = f"Failed to install Playwright browsers: {result.stderr}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+
+            logger.info("Playwright browsers installed successfully")
+            console.print("[green]Playwright browsers installed successfully[/green]")
+
+        except subprocess.TimeoutExpired:
+            error_msg = "Browser installation timed out"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        except FileNotFoundError:
+            error_msg = "playwright command not found. Please install playwright first: pip install playwright"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
 
     async def open_gphotos(self, path=""):
         url = "https://photos.google.com"
@@ -264,8 +344,8 @@ class GooglePhotosScraper:
                 # check if info box is okay
                 await self.set_info_box_parent_element()
                 await loc.first.wait_for(state="attached", timeout=5000)
-            src_id = str(source_id) if source_id else None
-            loc = loc.first if loc else None
+        src_id = str(source_id) if source_id else None
+        loc = loc.first if loc else None
         return src_id, loc
 
     async def get_photo_info(
