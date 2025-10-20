@@ -110,6 +110,16 @@ DEP003 = ["immichporter"] # transitive dependencies
 DEP002 = ["psycopg2-binary"]
 
 
+[tool.ty.src]
+exclude = [
+    "src/immichporter/immich/client/**/*", # auto generated
+    "src/immichporter/immich/client/api/albums/get_all_albums.py"
+]
+
+#include = [
+#    "src/**/*"
+#]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Iterator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -26,7 +26,7 @@ class ImmichDBClient:
         )
 
     @contextmanager
-    def session_scope(self) -> Session:
+    def session_scope(self) -> Iterator[Session]:
         """Provide a transactional scope around operations."""
         session = self.SessionLocal()
         try:

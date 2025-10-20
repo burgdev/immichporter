@@ -9,7 +9,14 @@ from rich.console import Console
 from rich.traceback import Traceback
 
 
-def traceback(e: Exception) -> str:
+def traceback(
+    e: Exception
+    | KeyboardInterrupt
+    | ValueError
+    | EOFError
+    | AssertionError
+    | AttributeError,
+) -> str:
     buffer = StringIO()
     console = Console(file=buffer, force_terminal=True)
     tb = Traceback.from_exception(type(e), e, e.__traceback__)

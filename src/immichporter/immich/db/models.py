@@ -1,5 +1,5 @@
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Enum as SQLAEnum
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import declarative_base
@@ -37,11 +37,16 @@ class Asset(Base):
     file_modified_at = Column("fileModifiedAt", DateTime, nullable=False)
     status = Column(SQLAEnum(AssetStatus), nullable=False)
     visibility = Column(SQLAEnum(AssetVisibility), nullable=False)
-    created_at = Column("createdAt", DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(
+        "createdAt",
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
     updated_at = Column(
         "updatedAt",
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )

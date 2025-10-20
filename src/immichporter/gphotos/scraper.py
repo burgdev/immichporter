@@ -3,6 +3,7 @@
 import asyncio
 from datetime import datetime
 from dateutil import parser
+from pathlib import Path
 import time
 from typing import List, Optional
 from loguru import logger
@@ -69,7 +70,8 @@ class GooglePhotosScraper:
         album_fresh: bool = False,
         albums_only: bool = False,
         clear_storage: bool = False,
-        user_data_dir: str = playwright_session_dir,
+        user_data_dir: str | Path = playwright_session_dir,
+        headless: bool = True,
     ):
         self.max_albums = max_albums
         self.start_album = start_album
@@ -77,10 +79,11 @@ class GooglePhotosScraper:
         self.skip_existing = not album_fresh
         self.albums_only = albums_only
         self.clear_storage = clear_storage
-        self.user_data_dir = user_data_dir
+        self.user_data_dir = Path(user_data_dir)
         self.playwright = None
         self.context = None
         self.page = None
+        self.headless = headless
         self._default_user = None
         self._info_box_parent_element = None
 
@@ -102,8 +105,8 @@ class GooglePhotosScraper:
 
         # Launch non-persistent context to avoid session conflicts
         self.context = await self.playwright.chromium.launch_persistent_context(
-            user_data_dir=self.user_data_dir,
-            headless=False,
+            user_data_dir=str(self.user_data_dir),
+            headless=self.headless,
             executable_path=None,  # Use Playwright's Chromium
             args=all_args,
             ignore_default_args=["--enable-automation"],
@@ -172,7 +175,7 @@ class GooglePhotosScraper:
         console.print("[green]Login successful![/green]")
         return True
 
-    async def get_album_info(self) -> AlbumInfo:
+    async def get_album_info(self) -> AlbumInfo | None:
         """Extract album information from the current selection."""
         try:
             # Get the currently selected album element
@@ -241,7 +244,7 @@ class GooglePhotosScraper:
 
     async def get_info_box_element(
         self, loc: Locator | None = None
-    ) -> tuple[str | None, ElementHandle | None]:
+    ) -> tuple[str | None, Locator | None]:
         """Returns source_id and locator of current info box"""
         source_id = await self.get_source_id()
         loc = loc or self.page.locator(f'c-wiz[jslog*="{source_id}"]')
@@ -261,7 +264,9 @@ class GooglePhotosScraper:
                 # check if info box is okay
                 await self.set_info_box_parent_element()
                 await loc.first.wait_for(state="attached", timeout=5000)
-        return source_id, loc.first
+            src_id = str(source_id) if source_id else None
+            loc = loc.first if loc else None
+        return src_id, loc
 
     async def get_photo_info(
         self, album: AlbumInfo, el: Locator | None = None
@@ -367,11 +372,12 @@ class GooglePhotosScraper:
         self,
         album: AlbumInfo,
         skip_existing: bool = True,
-    ) -> AlbumInfo:
+    ) -> AlbumInfo | None:
         """Process images from an album using its gphoto_url URL."""
         console.print(
             f"Processing album {album.album_id} [green]'{album.title}'[/green]", end=""
         )
+        assert album.album_id is not None
 
         # Get existing photo count
         with get_db_session() as session:
@@ -567,6 +573,7 @@ class GooglePhotosScraper:
 
                     except Exception as e:  # catch all
                         insert_error(
+                            session,
                             f"Error saving picture {picture_info.filename}: {e}",
                             album.album_id,
                         )
@@ -628,7 +635,7 @@ class GooglePhotosScraper:
         for _ in range(album_position):
             await self.keyboard_press("ArrowRight", delay=ALBUM_NAVIGATION_DELAY)
 
-    async def keyboard_press(self, key: str, delay: int | None = 0.2):
+    async def keyboard_press(self, key: str, delay: int | None | float = 0.2):
         """Press a keyboard key with optional delay."""
         logger.debug(f"Pressing key '{key}'")
         await self.page.keyboard.press(key)
@@ -636,10 +643,12 @@ class GooglePhotosScraper:
             await asyncio.sleep(delay)
 
     async def collect_albums(
-        self, max_albums: int = None, start_album: int = 1
+        self, max_albums: int | None = None, start_album: int = 1
     ) -> List[AlbumInfo]:
         """Collect albums from Google Photos UI and add them to database."""
         # await self.setup_browser()
+        start_album = start_album or 0
+        max_albums = max_albums or 0
 
         console.print("[green]Collecting albums from Google Photos UI...[/green]")
         console.print(f"Starting from album position [blue]{start_album}[/blue]")
