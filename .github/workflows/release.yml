@@ -24,6 +24,7 @@ jobs:
         uses: extractions/setup-just@v3
 
       - name: Get latest changelog
+        uses: extractions/setup-just@v3
         id: changelog
         run: |
           VERSION=$(just project version); echo "Current version: $VERSION"
