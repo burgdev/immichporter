@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, case
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from rich.console import Console
 from loguru import logger
 
@@ -31,6 +31,7 @@ def init_database(reset_db: bool = False) -> None:
     from sqlalchemy import inspect, text
 
     engine = SessionLocal().bind
+    assert engine is not None
 
     if reset_db:
         Base.metadata.drop_all(bind=engine)
@@ -46,7 +47,7 @@ def init_database(reset_db: bool = False) -> None:
         columns = [col["name"] for col in inspector.get_columns("users")]
         if "add_to_immich" not in columns:
             with engine.begin() as conn:
-                conn.execute(
+                conn.execute(  # type: ignore
                     text(
                         "ALTER TABLE users ADD COLUMN add_to_immich BOOLEAN DEFAULT TRUE NOT NULL"
                     )
@@ -58,7 +59,7 @@ def init_database(reset_db: bool = False) -> None:
         # Migration 2: Add immich_user_id column if it doesn't exist
         if "immich_user_id" not in columns:
             with engine.begin() as conn:
-                conn.execute(
+                conn.execute(  # type: ignore
                     text("ALTER TABLE users ADD COLUMN immich_user_id INTEGER")
                 )
                 console.print(
@@ -66,7 +67,7 @@ def init_database(reset_db: bool = False) -> None:
                 )
         if "immich_initial_password" not in columns:
             with engine.begin() as conn:
-                conn.execute(
+                conn.execute(  # type: ignore
                     text("ALTER TABLE users ADD COLUMN immich_initial_password STRING")
                 )
 
@@ -74,18 +75,18 @@ def init_database(reset_db: bool = False) -> None:
         columns = [col["name"] for col in inspector.get_columns("photos")]
         if "immich_id" not in columns:
             with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE photos ADD COLUMN immich_id STRING"))
+                conn.execute(text("ALTER TABLE photos ADD COLUMN immich_id STRING"))  # type: ignore
                 console.print(
                     "[yellow]Applied migration: Added immich_id column to photos table[/yellow]"
                 )
         if "saved_to_your_photos" not in columns:
             with engine.begin() as conn:
-                conn.execute(
+                conn.execute(  # type: ignore
                     text(
                         "ALTER TABLE photos ADD COLUMN saved_to_your_photos BOOLEAN DEFAULT FALSE NOT NULL"
                     )
                 )
-                conn.execute(
+                conn.execute(  # type: ignore
                     text(
                         "UPDATE photos SET saved_to_your_photos = FALSE WHERE saved_to_your_photos IS NULL"
                     )
@@ -99,7 +100,7 @@ def init_database(reset_db: bool = False) -> None:
         columns = [col["name"] for col in inspector.get_columns("albums")]
         if "immich_id" not in columns:
             with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE albums ADD COLUMN immich_id STRING"))
+                conn.execute(text("ALTER TABLE albums ADD COLUMN immich_id STRING"))  # type: ignore
                 console.print(
                     "[yellow]Applied migration: Added immich_id column to albums table[/yellow]"
                 )
@@ -110,13 +111,14 @@ def init_database(reset_db: bool = False) -> None:
 def insert_or_update_album(session: Session, album_info) -> int:
     """Insert or update an album from AlbumInfo object."""
     # Check if album exists
-    existing_album = (
+    existing_album: Album | None = (
         session.query(Album)
         .filter_by(source_url=album_info.url, source_type="gphoto")
         .first()
     )
 
-    if existing_album:
+    if existing_album is not None:
+        assert isinstance(existing_album, Album)
         # Update existing album
         existing_album.items = album_info.items
         existing_album.shared = album_info.shared
@@ -246,7 +248,7 @@ def insert_photo(
 
 
 def insert_error(
-    session: Session, error_message: str, album_id: Optional[int] = None
+    session: Session, error_message: str, album_id: int | None = None
 ) -> None:
     """Insert an error."""
     error = Error(error_message=error_message, album_id=album_id)
@@ -288,7 +290,10 @@ def get_album_photos_count(session: Session, album_id: int) -> int:
 
 def get_album_processed_items(session: Session, album_id: int) -> int:
     """Get the number of processed items for an album."""
-    return session.query(Album).filter_by(id=album_id).first().processed_items
+    res = session.query(Album).filter_by(id=album_id).first()
+    if res is not None:
+        return res.processed_items
+    return 0
 
 
 def update_album_processed_items(

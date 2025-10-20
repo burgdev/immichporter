@@ -20,6 +20,9 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-venv
 
+      - name: Install just
+        uses: extractions/setup-just@v3
+
       - name: Get latest changelog
         uses: extractions/setup-just@v3
         id: changelog

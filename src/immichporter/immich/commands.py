@@ -2,6 +2,7 @@
 
 import time
 import click
+from uuid import UUID
 import sys
 from rich.progress import Progress, SpinnerColumn, BarColumn
 import functools
@@ -16,7 +17,7 @@ from rich.progress import (
 )
 
 from immichporter.utils import generate_password
-from datetime import datetime
+from datetime import datetime, timezone
 from immichporter.immich.immich import ImmichClient, immich_api_client
 from immichporter.database import (
     get_db_session,
@@ -280,7 +281,7 @@ def update_photos(immich: ImmichClient, dry_run: bool, **options):
                                 {
                                     "id": photo.id,
                                     "immich_id": matched_asset_id,
-                                    "updated_at": datetime.utcnow(),
+                                    "updated_at": datetime.now(timezone.utc),
                                 }
                             )
                             updated_count += 1
@@ -302,7 +303,7 @@ def update_photos(immich: ImmichClient, dry_run: bool, **options):
                 if not dry_run:
                     try:
                         # Update all photos in the batch at once
-                        session.bulk_update_mappings(Photo, batch_updates)
+                        session.bulk_update_mappings(Photo, batch_updates)  # type: ignore
                         session.commit()
                         logger.debug(f"Updated {len(batch_updates)} photos in batch")
                     except Exception as e:
@@ -395,6 +396,7 @@ def sync_albums(immich: ImmichClient, limit: int | None, dry_run: bool, **option
     ]
 
     my_user = get_my_user.sync(client=immich.client)
+    assert my_user is not None
     if my_user is None:
         logger.error("Failed to get my user")
         sys.exit(1)
@@ -407,7 +409,7 @@ def sync_albums(immich: ImmichClient, limit: int | None, dry_run: bool, **option
                 # Get album users with immich_id
                 album_users = [
                     AlbumUserCreateDto(
-                        user_id=user.immich_user_id, role=AlbumUserRole.VIEWER
+                        user_id=UUID(user.immich_user_id), role=AlbumUserRole.VIEWER
                     )
                     for user in album.users
                     if user.immich_user_id is not None
@@ -506,6 +508,8 @@ def update_users(immich: ImmichClient, dry_run: bool, **options):
             # create new user
             password = generate_password()
             if not dry_run:
+                assert immich_name is not None
+                assert immich_email is not None
                 immich.add_user(
                     name=immich_name, email=immich_email, password=password, quota_gb=15
                 )

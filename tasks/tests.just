@@ -4,8 +4,8 @@ import 'core.just'
 [default]
 tests parallel="no":
     #! ./.shell-wrapper.sh
+    header $(doc tests)
     parallel=$(is_true "{{parallel}}")
-    header "Running tests"
     if [[ "$parallel" == "true" ]]; then
         pytest -v -n auto
     else
