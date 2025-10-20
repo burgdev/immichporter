@@ -85,10 +85,6 @@ async def setup_scraper(
     clear_storage=False,
     headless=True,
 ):
-    # Update database path
-    global DATABASE_PATH
-    DATABASE_PATH = db_path
-
     logger.info(f"Database path: {db_path}")
 
     # Create scraper instance

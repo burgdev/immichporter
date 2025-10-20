@@ -1,5 +1,6 @@
+from immichporter.immich.client.models.asset_response_dto import AssetResponseDto
 from immichporter.immich.client import AuthenticatedClient
-from typing import Type
+from typing import Type, Any
 from immichporter.immich.client.api.albums import (
     get_all_albums,
     create_album,
@@ -12,15 +13,15 @@ from immichporter.immich.client.api.users_admin import (
     search_users_admin,
     create_user_admin,
 )
+from uuid import UUID
 from immichporter.immich.client.models import (
     MetadataSearchDto,
-    SearchResponseDto,
-    UserResponseDto,
     UserAdminCreateDto,
     AlbumUserCreateDto,
     CreateAlbumDto,
     AlbumResponseDto,
     JobCreateDto,
+    UserAdminResponseDto,
     JobCommandDto,
     ManualJobName,
     JobName,
@@ -48,11 +49,11 @@ def immich_api_client(
     if not base_url.endswith("/api"):
         base_url = f"{base_url}/api"
     client = AuthenticatedClient(
-        base_url=base_url,
+        base_url=base_url,  # type: ignore
         token=api_key,
         auth_header_name="x-api-key",
         prefix="",
-        verify_ssl=not insecure,
+        verify_ssl=not insecure,  # type: ignore
     )
 
     return client
@@ -68,13 +69,18 @@ class ImmichClient:
     ):
         """Immich client with specific functions, often an API wrapper."""
         self._api_key = api_key
-        self._client = (
-            client
-            if client is not None
-            else immich_api_client(
+        if client is not None:
+            self._client = client
+        else:
+            assert (
+                endpoint is not None
+            ), "'endpoint' must be provided if 'client' is not provided"
+            assert (
+                api_key is not None
+            ), "'api_key' must be provided if 'client' is not provided"
+            self._client = immich_api_client(
                 endpoint=endpoint, api_key=api_key, insecure=insecure
             )
-        )
 
     @property
     def client(self) -> ImmichApiClient:
@@ -94,10 +100,12 @@ class ImmichClient:
             limit: Maximum number of albums to return
             shared: Filter by shared status (True for shared, False for not shared, None for all)
         """
+        shared: Unset | bool = UNSET if shared is None else shared
         response = get_all_albums.sync_detailed(client=self.client, shared=shared)
         if response.status_code != 200:
             raise Exception(f"Failed to fetch albums: {response.content}")
 
+        assert response.parsed is not None
         albums: list[AlbumResponseDto] = response.parsed
 
         # Sort albums by name
@@ -116,9 +124,11 @@ class ImmichClient:
         users: list[AlbumUserCreateDto] | None = None,
         assets: list[str] | None = None,
     ) -> AlbumResponseDto:
-        description = UNSET if description is None else description
-        users = UNSET if users is None else users
-        assets = UNSET if assets is None else assets
+        description: Unset | str = UNSET if description is None else description
+        users: Unset | list[AlbumUserCreateDto] = UNSET if users is None else users
+        assets: Unset | list[UUID] = (
+            UNSET if assets is None else [UUID(a) for a in assets]
+        )
         body = CreateAlbumDto(
             album_name=name,
             description=description,
@@ -130,6 +140,7 @@ class ImmichClient:
             raise Exception(
                 f"Failed to create album {response.status_code}: {response.content}"
             )
+        assert response.parsed is not None
         return response.parsed
 
     def delete_album(
@@ -145,7 +156,7 @@ class ImmichClient:
                     break
         if album_id is None:
             raise ValueError(f"Album '{album_name}' not found")
-        response = delete_album.sync_detailed(client=self.client, id=album_id)
+        response = delete_album.sync_detailed(client=self.client, id=UUID(album_id))
         if response.status_code != 204:
             raise Exception(
                 f"Failed to delete album {response.status_code}: {response.content}"
@@ -157,8 +168,8 @@ class ImmichClient:
         taken: datetime | str | None | Unset = None,
         taken_before: datetime | str | None | Unset = None,
         taken_after: datetime | str | None | Unset = None,
-        **options: any,
-    ) -> list[AlbumResponseDto]:
+        **options: dict[str, Any],
+    ) -> list[AssetResponseDto]:
         """Search for assets on the Immich server.
 
         Dates can be formate as follow:
@@ -201,25 +212,27 @@ class ImmichClient:
             original_file_name=filename,
             taken_before=taken_before,
             taken_after=taken_after,
-            **options,
+            **options,  # type: ignore
         )
         response = search_assets.sync_detailed(client=self.client, body=search_dto)
         if response.status_code != 200:
             raise Exception(f"Failed to fetch albums: {response.content}")
 
-        assets: list[SearchResponseDto] = response.parsed
+        assets = response.parsed
+        assert assets is not None
 
         return assets.assets.items
 
-    def get_users(self, width_deleted: bool = True) -> list[UserResponseDto]:
+    def get_users(self, width_deleted: bool = True) -> list[UserAdminResponseDto]:
         response = search_users_admin.sync_detailed(client=self.client)
         if response.status_code != 200:
             raise Exception(f"Failed to fetch users: {response.content}")
+        assert response.parsed is not None
         return response.parsed
 
     def add_user(
         self, name: str, email: str, password: str, quota_gb: int = 10
-    ) -> UserResponseDto:
+    ) -> UserAdminResponseDto:
         quota_bytes = 1073741824 * quota_gb
         body = UserAdminCreateDto(
             name=name,
@@ -234,9 +247,11 @@ class ImmichClient:
             raise Exception(
                 f"Failed to create user {response.status_code}: {response.content}"
             )
-        return response.parsed
+        res = response.parsed
+        assert res is not None
+        return res
 
-    def start_job(self, job_name: ManualJobName | JobName) -> dict:
+    def start_job(self, job_name: ManualJobName | JobName) -> bool:
         """Start a new job with the given name.
 
         Args:
@@ -263,7 +278,6 @@ class ImmichClient:
                     )
                 return True
             elif isinstance(job_name, JobName):
-                job_data = JobCreateDto(name=JobName(job_name))
                 # Send the request to create the job
                 body = JobCommandDto(command=JobCommand.START)
                 response = send_job_command.sync_detailed(
@@ -279,11 +293,12 @@ class ImmichClient:
                         )
                         return True
 
-                if not response.status_code.is_success:
+                if not response.status_code.is_success:  # type: ignore
                     raise Exception(
                         f"Failed to start job {job_name} (status code: {response.status_code}): {response.content}"
                     )
                 job_status = response.parsed
+                assert job_status is not None
                 return job_status.job_counts.active >= 0
 
         except Exception as e:
@@ -303,7 +318,7 @@ class ImmichClient:
         """
         try:
             response = get_all_jobs_status.sync_detailed(client=self._client)
-            if not response.status_code.is_success:
+            if not response.status_code.is_success:  # type: ignore
                 raise Exception(
                     f"Failed to get job status (status code: {response.status_code}): {response.content}"
                 )

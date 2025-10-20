@@ -27,7 +27,7 @@ from loguru import logger
 cli_db = click.Group("db", help="Database commands")
 
 
-def prompt_with_default(text: str, default: str = None) -> str:
+def prompt_with_default(text: str, default: str | None = None) -> str:
     """Prompt with a default value that can be edited using prompt_toolkit."""
     from prompt_toolkit import prompt
     from prompt_toolkit.key_binding import KeyBindings
@@ -193,7 +193,7 @@ def show_users(immich: bool, show_password: bool, format: str, log_level: str):
                 table.add_column("Initial Password", style="dim green")
             table.add_column("Created At", style="dim")
         else:
-            table = []
+            table: list[list[str]] = []
             header = [
                 "id",
                 "source_name",
@@ -230,22 +230,29 @@ def show_users(immich: bool, show_password: bool, format: str, log_level: str):
                 row.append(user.immich_initial_password or none_sign)
             row.append(str(user.created_at)[:19] if user.created_at else "N/A")
             if format == "table":
+                assert isinstance(table, Table)
                 table.add_row(*row)
             else:
-                table.append(row)
+                assert isinstance(table, list)
+                table.append(row)  # type: ignore
 
         if format == "table":
+            assert isinstance(table, Table)
             console.print(table)
         elif format == "csv":
+            assert isinstance(table, list)
             console.print(",".join(header))
             for row in table:
-                click.echo(",".join(map(format_csv_value, row)))
+                click.echo(",".join(map(format_csv_value, row)))  # type: ignore
         elif format == "json":
-            table_json = [dict(zip(header, row)) for row in table]
+            assert isinstance(table, list)
+            table_json = [dict(zip(header, row)) for row in table]  # type: ignore
             click.echo(json.dumps(table_json, indent=2))
 
 
-def update_user_immich_name(session: Session, user_id: int, immich_name: str) -> None:
+def update_user_immich_name(
+    session: Session, user_id: int, immich_name: str | None = None
+) -> None:
     """Update a user's immich name."""
     user = session.query(User).filter_by(id=user_id).first()
     if user:
@@ -294,7 +301,10 @@ def update_user_add_to_immich(
 )
 @logging_options
 def edit_users(
-    domain: str = None, all: bool = False, user_id: int = None, log_level: str = "INFO"
+    domain: str | None = None,
+    all: bool = False,
+    user_id: int | None = None,
+    log_level: str = "INFO",
 ):
     """Interactively edit user information in the database.
 

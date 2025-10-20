@@ -2,7 +2,8 @@ import 'core.just'
 
 # ▶️  Run all core quality checks (default)
 [default]
-all: lock lint deps
+all: lock lint deps types
+    @info "Tests are not run, use 'just tests' as well."
 
 # 🔒 Checking uv lock file
 lock:
@@ -34,6 +35,10 @@ types:
     @header "$(doc check types)"
     uv run ty check src
     @success "🏁 Static type checking passed!"
+
+# 📋 Run tests (alias to 'just tests')
+tests:
+    just tests
 
 # ❓ Show help
 [private]
