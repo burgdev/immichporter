@@ -123,7 +123,6 @@ def insert_or_update_album(session: Session, album_info) -> int:
         existing_album.items = album_info.items
         existing_album.shared = album_info.shared
         existing_album.source_url = album_info.url
-        console.print(f"[yellow]Updated album: {album_info.title}[/yellow]")
         session.commit()
         return existing_album.id
     else:
@@ -138,7 +137,6 @@ def insert_or_update_album(session: Session, album_info) -> int:
         )
         session.add(album)
         session.commit()
-        console.print(f"[green]Added album: {album_info.title}[/green]")
         return album.id
 
 

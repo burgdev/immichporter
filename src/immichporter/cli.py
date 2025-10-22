@@ -18,14 +18,29 @@ console = Console()
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option()
 def cli():
-    """Immichporter lets you extract metadata from google photos (`gphotos`) and use it to update
-    users and albums in Immich.
+    """Immichporter retrieves metadata not available in google takeout,
+    including shared albums, assets, and shared users.
+    You can use this data to update assets in Immich,
+    re-add users to shared albums, and even move assets to their correct owners.
 
-    The command line interface uses subcommands for the various tasks:
+    The command line interface uses subcommands for the various tasks (see below).
 
-    * `gphotos`: Login to Google Photos and export albums and photos metadata
-    * `db`: Show and edit metadata in the local database (not in immich!)
-    * `immich`: Update users and albums in Immich
+    This are the steps needed to extract the information from google photos and update immich:
+
+    \b
+        immich-go ... # see https://github.com/simulot/immich-go
+        immichporter gphotos login
+        immichporter gphotos albums
+        immichporter gphotos photos
+        immichporter db edit-users
+        export IMMICH_ENDPOINT=http://localhost:2283
+        export IMMICH_API_KEY=your_api_key
+        export IMMICH_INSECURE=1
+        immichporter immich update-users
+        immichporter immich update-albums
+        immichporter immich sync-albums
+        immichporter immich adjust-owners
+
     """
     pass
 
