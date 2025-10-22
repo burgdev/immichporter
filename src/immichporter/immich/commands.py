@@ -50,7 +50,7 @@ def format_time(seconds: float) -> str:
 console = Console()
 
 # Create a Click command group
-cli_immich = click.Group("immich", help="Immich commands")
+cli_immich = click.Group("immich", help="Update users and albums in Immich")
 
 
 def immich_options(f):

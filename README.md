@@ -16,14 +16,13 @@
 > [!WARNING]
 > * **Still experimental:** Google Photos export works in some cases, but stability issues remain.
 > * Only works in **English**
-> * Immich import/update not yet tested!
 
 
 **Immichporter** exports google photos *information* into a sqlite database which can be used to import the information back into immich.
 
 > [!IMPORTANT]
 > * This tool **does not** download any images from google photos. It only exports the information into a database.
-> * Make sure to manulley save all shared pictures in google photos before running a takeout.
+> * Make sure to manually save all shared pictures in google photos before running a takeout.
 
 <!-- # --8<-- [start:readme_index] <!-- -->
 
@@ -34,7 +33,16 @@ It can add all users again to shared albums and you can even move assets to the 
 
 ## Installation
 
-Using [uv](https://github.com/astral-sh/uv) (recommended):
+Run it directly with [uv](https://github.com/astral-sh/uv) (recommended):
+
+```bash
+uvx immichporter -h
+```
+
+or install it:
+
+Using:
+
 ```bash
 uv add immichporter
 ```
@@ -44,14 +52,11 @@ Or with pip:
 pip install immichporter
 ```
 
-
 ## Usage
 
 ```bash
 # Show help
 immichporter --help
-
-playwright install # might be required the first time
 
 # login is required the first time, the session is saved
 immichporter gphotos login
@@ -66,6 +71,8 @@ immichporter gphotos photos
 # multiple runs might be needed until everything is correct,
 # you can check with if every album is fully processed
 immichporter db show-albums --not-finished
+# run again
+immichporter gphotos photos --not-finished
 
 # edit/update users
 immichporter db show-users
@@ -76,11 +83,14 @@ sqlitebrowser immichporter.db
 
 # !! CAUTION: create a backup of your immich database before running this commands !!
 
+export IMMICH_ENDPOINT=http://localhost:2283
+export IMMICH_API_KEY=your_api_key
+export IMMICH_INSECURE=1
+
 # this steps are needed to get the immich ids into the 'immichporter.db' sqlite database
 # and create non existing users and albums in immich
 immichporter immich update-albums
 immichporter immich update-users
-
 
 # delete ablums (optional) if you want to start over
 # !! this delete all albums in immich !!
@@ -88,20 +98,20 @@ immichporter immich update-users
 immichporter immich delete-albums
 
 # sync albums to immich (create albums and users, add assets to albums)
-export IMMICH_ENDPOINT=http://localhost:2283
-export IMMICH_API_KEY=your_api_key
-export IMMICH_INSECURE=1
 immichporter sync-albums --dry-run  
 immichporter sync-albums
 ```
 
 ## TODO
 
-* [x] export albums with photos and people from gphotos (first version)
-* [x] import to immich
-* [x] move assets to correct user
+* [x] get all ablums from gphotos
+* [x] get all metadata from photos inside the albums (shared with, timestamp, ...)
+* [x] update user information (local DB)
+* [x] create or update albums in immich
+* [x] create or update users in immich
+* [x] add/update assets to albums in immich
+* [ ] move assets to correct user (needs to be tested)
 * [ ] improve documentation
-* [ ] improve gphotos export stability (80%)
 * [ ] interactive wizard with ui (web or gui ...)
 * [ ] submit changes to server for an admin to review and update
 

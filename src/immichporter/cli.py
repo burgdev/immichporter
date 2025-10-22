@@ -18,7 +18,15 @@ console = Console()
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option()
 def cli():
-    """Immichporter - Import photos from various sources to Immich."""
+    """Immichporter lets you extract metadata from google photos (`gphotos`) and use it to update
+    users and albums in Immich.
+
+    The command line interface uses subcommands for the various tasks:
+
+    * `gphotos`: Login to Google Photos and export albums and photos metadata
+    * `db`: Show and edit metadata in the local database (not in immich!)
+    * `immich`: Update users and albums in Immich
+    """
     pass
 
 
