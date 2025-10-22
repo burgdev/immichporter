@@ -23,6 +23,7 @@ COMMANDS = [
     ("immich", ["immich", "--help"]),
     ("immich_list-albums", ["immich", "list-albums", "--help"]),
     ("immich_delete-albums", ["immich", "delete-albums", "--help"]),
+    ("immich_untag-assets", ["immich", "untag-assets", "--help"]),
     ("immich_adjust-owners", ["immich", "adjust-owners", "--help"]),
     ("immich_sync-albums", ["immich", "sync-albums", "--help"]),
     ("immich_update-users", ["immich", "update-users", "--help"]),
