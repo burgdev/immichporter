@@ -24,7 +24,9 @@ from ..gphotos.utils import traceback
 from loguru import logger
 
 
-cli_db = click.Group("db", help="Database commands")
+cli_db = click.Group(
+    "db", help="Show and edit metadata in the local database (not in immich!)"
+)
 
 
 def prompt_with_default(text: str, default: str | None = None) -> str:

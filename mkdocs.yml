@@ -6,9 +6,9 @@ repo_name: burgdev/immichporter
 
 nav:
   - "Getting Started": index.md
-  #- "<i>immichporter</i>": cli.md
-  - API Reference:
-      - immichporter: reference/
+  - "<i>immichporter</i>": cli.md
+  #- API Reference:
+  #    - immichporter: reference/
   - Packages: packages.md
   - Changelog: changelog.md
 
@@ -89,9 +89,10 @@ plugins:
       add_icon: false
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
-  - gen-files:
-      scripts:
-        - tasks/gen_ref_pages.py
+  # generate reference pages
+  # - gen-files:
+  #     scripts:
+  #       - tasks/gen_ref_pages.py
   - literate-nav
   - section-index
   - termynal
@@ -192,8 +193,10 @@ markdown_extensions:
   #- pymdownx.blocks.tab
 
 watch:
-  - src
+  - src/
   - README.md
-  - docs
+  - docs/
+  - mkdocs.yml
+
 extra_css:
   - css/custom.css

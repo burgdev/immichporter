@@ -12,7 +12,9 @@ from immichporter.gphotos.settings import playwright_session_dir
 from immichporter.commands import logging_options, database_options
 
 # Create a Click command group
-cli_gphotos = click.Group("gphotos", help="Google Photos commands")
+cli_gphotos = click.Group(
+    "gphotos", help="Login to Google Photos and export albums and photos metadata"
+)
 
 console = Console()
 
