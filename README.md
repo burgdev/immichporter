@@ -3,7 +3,7 @@
   <a href="https://burgdev.github.io/immichporter"><img src="https://raw.githubusercontent.com/burgdev/immichporter/refs/heads/main/assets/logo/logo.svg" alt="Immichporter" width="128" /></a>
 </p>
 <p align="center">
-    <em>Google photos to immich importer helper</em>
+    <em>Import your Google Photos structure and sharing info into Immich — metadata only, no image data.</em>
 </p>
 <p align="center">
     <b><a href="https://burgdev.github.io/immichporter">Documentation</a></b>
@@ -17,19 +17,16 @@
 > * **Still experimental:** Google Photos export works in some cases, but stability issues remain.
 > * Only works in **English**
 
-
-**Immichporter** exports google photos *information* into a sqlite database which can be used to import the information back into immich.
+**[`Immichporter`](https://github.com/burgdev/immichporter)** retrieves metadata not available in google takeout, including shared albums, assets, and shared users. You can use this data to update assets in Immich, re-add users to shared albums, and even move assets to their correct owners.
 
 > [!IMPORTANT]
-> * This tool **does not** download any images from google photos. It only exports the information into a database.
+> * This tool **does not** download any images from google photos. It only extracts the information into a local database.
 > * Make sure to manually save all shared pictures in google photos before running a takeout.
 
 <!-- # --8<-- [start:readme_index] <!-- -->
 
 Use [google takeout](https://takeout.google.com) to export your google photos assets and [`immich-go`](https://github.com/simulot/immich-go) to import the data into immich.
 
-Use [`immichporter`](https://github.com/burgdev/immichporter) to get all assets and user per album and update/create all albums in immich again.
-It can add all users again to shared albums and you can even move assets to the correct user.
 
 ## Installation
 
@@ -53,6 +50,8 @@ pip install immichporter
 ```
 
 ## Usage
+
+**NOTE:** You need to import the assets into immich first, before running photos sync to immich.
 
 ```bash
 # Show help

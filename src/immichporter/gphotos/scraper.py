@@ -784,12 +784,12 @@ class GooglePhotosScraper:
                     with get_db_session() as session:
                         album_id = insert_or_update_album(session, album_info)
                     console.print(
-                        f"Added album [green]'{album_info.title}'[/green] to database (ID: [blue]{album_id}[/blue])"
+                        f"Added album '{album_info.title}' to database (ID: [blue]{album_id}[/blue])"
                     )
                     albums_collected.append(album_info)
                 else:
                     console.print(
-                        f"Album [green]'{album_info.title}'[/green] already exists in database. [yellow]Skipping.[/yellow]"
+                        f"Album '{album_info.title}' already exists in database. [yellow]Skipping.[/yellow]"
                     )
 
                 albums_processed += 1
