@@ -390,56 +390,8 @@ class ImmichClient:
             tags = [tag for tag in tags if filter_name in tag.name]
         return tags
 
-    def untag_assets(
-        self,
-        tag: TagResponseDto | str | UUID,
-        asset_ids: list[UUID | str] | None = None,
-        remove_tag: bool = False,
-    ) -> int:
-        if isinstance(tag, str):
-            tag = self.get_tags(filter_name=tag)[0].id
-        elif isinstance(tag, UUID):
-            res = get_tag_by_id.sync(client=self._client, id=tag)
-            if res is None:
-                raise Exception(f"Could not find tag with id {tag}")
-            tag = res
-        if isinstance(tag, TagResponseDto):
-            tag_id = tag.id
-        else:
-            raise Exception(f"Invalid tag type: {type(tag)}")
-
-        removed = 0
-        # check if there are children:
-        children = self.get_tags(parent_id=tag_id)
-        if children:
-            logger.info(f"Tag {tag_id} has children, removing them first")
-            # we need to remove children first:
-            for child in children:
-                removed += self.untag_assets(tag=child, remove_tag=remove_tag)
-
-        if asset_ids is None:
-            asset_ids = list(self.search_assets(tag_id=tag_id))
-        asset_ids = [
-            UUID(asset_id) if isinstance(asset_id, str) else asset_id
-            for asset_id in asset_ids
-        ]
-        tag_id = UUID(tag_id) if isinstance(tag_id, str) else tag_id
-        body = BulkIdsDto(ids=asset_ids)
-        response = untag_assets.sync_detailed(client=self._client, id=tag_id, body=body)
-        if not response.status_code.is_success:  # type: ignore
-            raise Exception(
-                f"Failed to untag assets (status code: {response.status_code}): {response.content}"
-            )
-        removed += len(asset_ids)
-        if remove_tag:
-            response = delete_tag.sync_detailed(client=self._client, id=tag_id)
-            if not response.status_code.is_success:  # type: ignore
-                raise Exception(
-                    f"Failed to delete tag (status code: {response.status_code}): {response.content}"
-                )
-        return removed
-
     def timeline_assets(self, tag_id: UUID | str | None = None, **kwargs):
+        """Get all assets from Immich by tag ID or **kwargs."""
         tag_id_arg = (
             tag_id if isinstance(tag_id, UUID) else UUID(tag_id) if tag_id else UNSET
         )
@@ -470,6 +422,55 @@ class ImmichClient:
                 raise Exception("Could not find time bucket")
             for asset_id in resp_parsed.id:
                 yield asset_id
+
+    def untag_assets(
+        self,
+        tag: TagResponseDto | str | UUID,
+        asset_ids: list[UUID | str] | None = None,
+        remove_tag: bool = False,
+    ) -> int:
+        if isinstance(tag, str):
+            tag = self.get_tags(filter_name=tag)[0].id
+        elif isinstance(tag, UUID):
+            res = get_tag_by_id.sync(client=self._client, id=tag)
+            if res is None:
+                raise Exception(f"Could not find tag with id {tag}")
+            tag = res
+        if isinstance(tag, TagResponseDto):
+            tag_id = tag.id
+        else:
+            raise Exception(f"Invalid tag type: {type(tag)}")
+
+        removed = 0
+        # check if there are children:
+        children = self.get_tags(parent_id=tag_id)
+        if children:
+            logger.info(f"Tag {tag_id} has children, removing them first")
+            # we need to remove children first:
+            for child in children:
+                removed += self.untag_assets(tag=child, remove_tag=remove_tag)
+
+        if asset_ids is None:
+            asset_ids = list(self.timeline_assets(tag_id=tag_id))
+        asset_ids = [
+            UUID(asset_id) if isinstance(asset_id, str) else asset_id
+            for asset_id in asset_ids
+        ]
+        tag_id = UUID(tag_id) if isinstance(tag_id, str) else tag_id
+        body = BulkIdsDto(ids=asset_ids)
+        response = untag_assets.sync_detailed(client=self._client, id=tag_id, body=body)
+        if not response.status_code.is_success:  # type: ignore
+            raise Exception(
+                f"Failed to untag assets (status code: {response.status_code}): {response.content}"
+            )
+        removed += len(asset_ids)
+        if remove_tag:
+            response = delete_tag.sync_detailed(client=self._client, id=tag_id)
+            if not response.status_code.is_success:  # type: ignore
+                raise Exception(
+                    f"Failed to delete tag (status code: {response.status_code}): {response.content}"
+                )
+        return removed
 
 
 if __name__ == "__main__":
