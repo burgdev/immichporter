@@ -484,8 +484,7 @@ if __name__ == "__main__":
     console.print(f"API Key: [yellow]'{client._api_key}'[/]")
     tag_filter = "from_google"
     tag_filter = None
-    # tag_parent_id = UUID("a74b0135-727d-4f32-9b43-c99d5ac7d92e")
-    # tag_parent_id = "a74b0135-727d-4f32-9b43-c99d5ac7d92e"
+    # tag_parent_id = UUID("a94b0135-727d-4f32-9b43-c99d5ac7d92e")
     # tag_parent_id = "People"
     tag_parent_id = None
     tags = client.get_tags(filter_name=tag_filter, parent_id=tag_parent_id)
