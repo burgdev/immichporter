@@ -456,6 +456,9 @@ class ImmichClient:
             UUID(asset_id) if isinstance(asset_id, str) else asset_id
             for asset_id in asset_ids
         ]
+        logger.debug(
+            f"Untagging {len(asset_ids)} assets with tag '{tag.value}' ({tag_id})"
+        )
         tag_id = UUID(tag_id) if isinstance(tag_id, str) else tag_id
         body = BulkIdsDto(ids=asset_ids)
         response = untag_assets.sync_detailed(client=self._client, id=tag_id, body=body)
@@ -465,6 +468,7 @@ class ImmichClient:
             )
         removed += len(asset_ids)
         if remove_tag:
+            logger.debug(f"Removing tag '{tag.value}' ({tag_id})")
             response = delete_tag.sync_detailed(client=self._client, id=tag_id)
             if not response.status_code.is_success:  # type: ignore
                 raise Exception(
