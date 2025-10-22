@@ -7,6 +7,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.4] - 2025-10-22
+
+#### 🚀 Features
+- Add delete tag command ([#19](https://github.com/burgdev/immichporter/pull/19))
+- Auto install playwright ([#18](https://github.com/burgdev/immichporter/pull/18))
+- Add information if photos are saved in gphotos ([#14](https://github.com/burgdev/immichporter/pull/14))
+- Add `saved_to_your_photos` property for gphotos ([#13](https://github.com/burgdev/immichporter/pull/13))
+
+#### 📝 Documentation
+- Add cli documentation ([#22](https://github.com/burgdev/immichporter/pull/22))
+
+#### 🌀 Others
+- Add type hints ([#17](https://github.com/burgdev/immichporter/pull/17))
+- Use [just](https://github.com/casey/just) as task manager (replace invoke) ([#16](https://github.com/burgdev/immichporter/pull/16))
+
+[0.0.4]: https://github.com/burgdev/immichporter/compare/v0.0.3..v0.0.4
+
 ## [0.0.3] - 2025-10-16
 
 #### 🚀 Features
