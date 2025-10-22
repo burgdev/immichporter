@@ -1,3 +1,4 @@
+from immichporter.immich.client.models.bulk_ids_dto import BulkIdsDto
 from immichporter.immich.client.models.asset_response_dto import AssetResponseDto
 from immichporter.immich.client import AuthenticatedClient
 from typing import Type, Any
@@ -8,6 +9,13 @@ from immichporter.immich.client.api.albums import (
 )
 import time
 import re
+from immichporter.immich.client.api.timeline import get_time_bucket, get_time_buckets
+from immichporter.immich.client.api.tags import (
+    get_all_tags,
+    untag_assets,
+    delete_tag,
+    get_tag_by_id,
+)
 from immichporter.immich.client.api.search import search_assets
 from immichporter.immich.client.api.users_admin import (
     search_users_admin,
@@ -15,6 +23,7 @@ from immichporter.immich.client.api.users_admin import (
 )
 from uuid import UUID
 from immichporter.immich.client.models import (
+    TagResponseDto,
     MetadataSearchDto,
     UserAdminCreateDto,
     AlbumUserCreateDto,
@@ -36,6 +45,7 @@ from immichporter.immich.client.api.jobs import (
 from immichporter.immich.client.types import UNSET, Unset
 from rich.console import Console
 from datetime import datetime, timedelta
+from loguru import logger
 
 console = Console()
 ImmichApiClient: Type[AuthenticatedClient] = AuthenticatedClient
@@ -338,6 +348,129 @@ class ImmichClient:
         self.start_job(ManualJobName.BACKUP_DATABASE)
         time.sleep(wait_time_s)
 
+    def get_tags(
+        self,
+        filter_name: str | None = None,
+        filter_value: str | None = None,
+        parent_id: UUID | str | None = None,
+    ) -> list[TagResponseDto]:
+        """Get all tags from Immich.
+
+        Args:
+            filter_name (str | None, optional): Filter tags by name (e.g. `TagName`). Defaults to None.
+            filter_value (str | None, optional): Filter tags by value (parents included, e.g. `Parent/TagName`). Defaults to None.
+            parent_id (UUID | str | None, optional): Filter tags by parent ID (either UUID or name, e.g. `Parent`). Defaults to None.
+
+        Returns:
+            List of tags
+        """
+        response = get_all_tags.sync_detailed(client=self._client)
+        if not response.status_code.is_success:  # type: ignore
+            raise Exception(
+                f"Failed to get tags (status code: {response.status_code}): {response.content}"
+            )
+        tags = response.parsed
+        if not tags:
+            raise Exception("Could not find tags")
+        if parent_id:
+            if isinstance(parent_id, UUID):
+                parent_uuid = str(parent_id)
+            else:
+                try:
+                    parent_uuid = UUID(parent_id)
+                except ValueError:
+                    parent_tags = self.get_tags(filter=parent_id)
+                    if not parent_tags:
+                        raise Exception(f"Could not find tag with name {parent_id}")
+                    parent_uuid = parent_tags[0].id
+            tags = [tag for tag in tags if tag.parent_id == str(parent_uuid)]
+        if filter_value:
+            tags = [tag for tag in tags if filter_value in tag.value]
+        if filter_name:
+            tags = [tag for tag in tags if filter_name in tag.name]
+        return tags
+
+    def untag_assets(
+        self,
+        tag: TagResponseDto | str | UUID,
+        asset_ids: list[UUID | str] | None = None,
+        remove_tag: bool = False,
+    ) -> int:
+        if isinstance(tag, str):
+            tag = self.get_tags(filter_name=tag)[0].id
+        elif isinstance(tag, UUID):
+            res = get_tag_by_id.sync(client=self._client, id=tag)
+            if res is None:
+                raise Exception(f"Could not find tag with id {tag}")
+            tag = res
+        if isinstance(tag, TagResponseDto):
+            tag_id = tag.id
+        else:
+            raise Exception(f"Invalid tag type: {type(tag)}")
+
+        removed = 0
+        # check if there are children:
+        children = self.get_tags(parent_id=tag_id)
+        if children:
+            logger.info(f"Tag {tag_id} has children, removing them first")
+            # we need to remove children first:
+            for child in children:
+                removed += self.untag_assets(tag=child, remove_tag=remove_tag)
+
+        if asset_ids is None:
+            asset_ids = list(self.search_assets(tag_id=tag_id))
+        asset_ids = [
+            UUID(asset_id) if isinstance(asset_id, str) else asset_id
+            for asset_id in asset_ids
+        ]
+        tag_id = UUID(tag_id) if isinstance(tag_id, str) else tag_id
+        body = BulkIdsDto(ids=asset_ids)
+        response = untag_assets.sync_detailed(client=self._client, id=tag_id, body=body)
+        if not response.status_code.is_success:  # type: ignore
+            raise Exception(
+                f"Failed to untag assets (status code: {response.status_code}): {response.content}"
+            )
+        removed += len(asset_ids)
+        if remove_tag:
+            response = delete_tag.sync_detailed(client=self._client, id=tag_id)
+            if not response.status_code.is_success:  # type: ignore
+                raise Exception(
+                    f"Failed to delete tag (status code: {response.status_code}): {response.content}"
+                )
+        return removed
+
+    def timeline_assets(self, tag_id: UUID | str | None = None, **kwargs):
+        tag_id_arg = (
+            tag_id if isinstance(tag_id, UUID) else UUID(tag_id) if tag_id else UNSET
+        )
+        response = get_time_buckets.sync_detailed(
+            client=self._client, tag_id=tag_id_arg, **kwargs
+        )
+        if not response.status_code.is_success:  # type: ignore
+            raise Exception(
+                f"Failed to get time buckets (status code: {response.status_code}): {response.content}"
+            )
+        time_buckets = response.parsed
+        if time_buckets is None:
+            raise Exception("Could not find time buckets")
+        for time_bucket in time_buckets:
+            time_bucket_ts = time_bucket.time_bucket
+            resp = get_time_bucket.sync_detailed(
+                client=self._client,
+                tag_id=tag_id_arg,
+                time_bucket=time_bucket_ts,
+                **kwargs,
+            )
+            if not resp.status_code.is_success:  # type: ignore
+                raise Exception(
+                    f"Failed to get time bucket (status code: {resp.status_code}): {resp.content}"
+                )
+            resp_parsed = resp.parsed
+            if not resp_parsed:
+                raise Exception("Could not find time bucket")
+            for asset_id in resp_parsed.id:
+                yield asset_id
+
 
 if __name__ == "__main__":
     import os
@@ -348,14 +481,19 @@ if __name__ == "__main__":
     client = ImmichClient(endpoint=endpoint, api_key=api_key, insecure=insecure)
     console.print(f"Endpoint: {client.endpoint}")
     console.print(f"API Key: [yellow]'{client._api_key}'[/]")
-    # albums = client.search_assets(
-    #   filename="20250113_101105.jpg", taken=None
-    # )
-    # console.print(albums)
-    # users = client.get_users()
-    # console.print(users)
-    # album = client.create_album("Test Album")
-    # console.print(album)
-    client.delete_album(album_name="Ralligstöck, 22.8.25")
-    albums = client.get_albums()
-    console.print([a.album_name for a in albums])
+    tag_filter = "from_google"
+    tag_filter = None
+    # tag_parent_id = UUID("a74b0135-727d-4f32-9b43-c99d5ac7d92e")
+    # tag_parent_id = "a74b0135-727d-4f32-9b43-c99d5ac7d92e"
+    # tag_parent_id = "People"
+    tag_parent_id = None
+    tags = client.get_tags(filter_name=tag_filter, parent_id=tag_parent_id)
+    for tag in tags:
+        console.print(tag.value)
+    # tag = tags[0]
+    ##console.print(tags)
+    # console.print(tag)
+    # removed = client.untag_assets(tag=tag, remove_tag=True)
+    # console.print(f"Removed {removed} assets")
+    ##for asset_id in client.search_assets(tag_id=tag.id):
+    #    #console.print(asset_id)
