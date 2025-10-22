@@ -24,7 +24,6 @@ jobs:
         uses: extractions/setup-just@v3
 
       - name: Extract latest version
-        uses: extractions/setup-just@v3
         id: latest-version
         run: |
           VERSION=$(just project version); echo "Current version: $VERSION"
