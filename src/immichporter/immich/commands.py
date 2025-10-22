@@ -521,6 +521,61 @@ def update_users(immich: ImmichClient, dry_run: bool, **options):
                 console.print("[yellow][DRY RUN][/] add user to immich")
 
 
+@cli_immich.command()
+@immich_options
+@click.option("--tag-name", help="Name of the tag")
+@click.option("-m", "--remove-tag", is_flag=True, help="Remove tag name as well")
+@click.option(
+    "--all", is_flag=True, help="Untag all assets. '--tag-name' will be ignored"
+)
+@click.option(
+    "-e",
+    "--exclude",
+    help="Name of tags to exclude if '--all' is used. Make sure to include parents as well!",
+    multiple=True,
+)
+@click.option(
+    "--dry-run/--no-dry-run",
+    default=True,
+    help="Run without making any changes",
+    show_default=True,
+)
+@logging_options
+def untag_assets(
+    immich: ImmichClient,
+    tag_name: str,
+    remove_tag: bool,
+    all: bool,
+    exclude: list[str],
+    dry_run: bool,
+    **options,
+):
+    """Untag assets with a specific tag. Children tags will be removed as well."""
+    if all:
+        tags = immich.get_tags()
+        tags = sorted(tags, key=lambda tag: len(tag.value.split("/")), reverse=True)
+        tags = [tag for tag in tags if tag.name not in exclude]
+        if not tags:
+            logger.error("No tags found")
+            sys.exit(1)
+    else:
+        tags = [immich.get_tags(filter_name=tag_name)[0]]
+        if not tags:
+            logger.error(f"Tag '{tag_name}' not found")
+            sys.exit(1)
+    for tag in tags:
+        console.print(f"Untagging assets with tag '{tag.value}'")
+        if dry_run:
+            assets = immich.timeline_assets(tag_id=tag.id)
+            console.print(
+                f"[yellow][DRY RUN][/] Would delete tag '{tag.value}' from {len(list(assets))} assets (use '--no-dry-run' to actually remove)"
+            )
+            # sys.exit(0)
+        else:
+            rm = immich.untag_assets(tag=tag, remove_tag=remove_tag)
+            console.print(f"Deleted tag '{tag.value}' from {rm} assets")
+
+
 @cli_immich.command("adjust-owners")
 @immich_options
 @click.option(
